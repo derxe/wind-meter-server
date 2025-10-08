@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wind speed</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <style>
+    body { font-family: sans-serif; padding: 2em; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Sensor Graph</h1>
+
+  <a href="/efiG1YOenDEmsN6/status">Status graph</a>
+
+<form method="get" id="duration-form">
+  <label for="duration">Select duration:</label>
+  <select id="duration" name="duration" onchange="document.getElementById('duration-form').submit()">
+    <option value="1">1 hour</option>
+    <option value="6">6 hours</option>
+    <option value="12">12 hours</option>
+    <option value="24">1 day</option>
+    <option value="48">2 days</option>
+    <option value="72">3 days</option>
+    <option value="96">4 days</option>
+    <option value="120">5 days</option>
+    <option value="168">7 days</option>
+    <option value="360">15 days</option>
+    <option value="720">30 days</option>
+  </select>
+</form>
+
+  <script>
+    // Read query string
+    const params = new URLSearchParams(window.location.search);
+    const selectedDuration = params.get("duration");
+    if (selectedDuration) {
+      const select = document.getElementById("duration");
+      select.value = selectedDuration;
+    }
+  </script>
+
+  <br>
+
+  <canvas id="myChart" height="100"></canvas>
+
+  <script>
+    // from Jinja:
+    let avgs = {{ data["avgs"] | tojson }};
+    let maxs = {{ data["maxs"] | tojson }};
+    // let dirs = {{ data["dirs"] | tojson }}; // ignored for now
+
+    // Convert to Chart.js point format {x: Date, y: Number}
+    const avgPoints = avgs.map(d => ({ x: new Date(d.timestamp), y: d.value }));
+    const maxPoints = maxs.map(d => ({ x: new Date(d.timestamp), y: d.value }));
+
+    const ctx = document.getElementById('myChart').getContext('2d');
+
+    // Vertical lines at local midnights across the visible x-range
+    const midnightLinesPlugin = {
+      id: 'midnightLines',
+      afterDraw: (chart) => {
+        const { ctx, scales: { x }, chartArea } = chart;
+        if (!x || x.min == null || x.max == null) return;
+
+        // Start from first midnight >= x.min
+        const first = new Date(x.min);
+        first.setHours(0,0,0,0);
+        if (first.getTime() < x.min) first.setDate(first.getDate() + 1);
+
+        for (let t = new Date(first); t.getTime() <= x.max; t.setDate(t.getDate() + 1)) {
+          const xPos = x.getPixelForValue(t);
+          if (xPos >= chartArea.left && xPos <= chartArea.right) {
+            ctx.save();
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(xPos, chartArea.top);
+            ctx.lineTo(xPos, chartArea.bottom);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+    };
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        // no labels; each dataset has x/y
+        datasets: [
+          {
+            label: "average",
+            data: avgPoints,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.2
+          },
+          {
+            label: "max",
+            data: maxPoints,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        parsing: false,           // we already provide {x,y}
+        normalized: true,         // better perf for time scale
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'hour',
+              displayFormats: { hour: 'HH' }
+            },
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 24
+            }
+          },
+          y: {
+            beginAtZero: false,
+            position: 'left'
+          },
+          y2: {
+            beginAtZero: false,
+            position: 'right',
+            grid: { drawOnChartArea: false }
+          }
+        }
+      },
+      plugins: [midnightLinesPlugin]
+    });
+
+    function refreshGraph() {
+      const field1 = document.getElementById("field-select").value;
+      const field2 = document.getElementById("field-select2").value;
+
+      chart.data.datasets = [
+        {
+          label: field1,
+          data: data.map(d => d[field1]),
+          yAxisID: 'y',
+          borderColor: 'blue',
+          backgroundColor: 'blue',
+          borderWidth: 2
+        }
+      ];
+
+      if (field2 && field2 !== "") {
+        chart.data.datasets.push({
+          label: field2,
+          data: data.map(d => d[field2]),
+          yAxisID: 'y2',
+          borderColor: 'red',
+          backgroundColor: 'red',
+          borderWidth: 2
+        });
+      }
+
+      chart.update();
+    }
+    document.getElementById("field-select2").addEventListener("change", refreshGraph);
+    document.getElementById("field-select").addEventListener("change", refreshGraph); 
+  </script>
+</body>
+</html>

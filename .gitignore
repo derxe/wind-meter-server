@@ -1,0 +1,7 @@
+logs/*
+app/logs/*
+app/venv
+app/__pycache__
+app/bin
+app/include
+lib*

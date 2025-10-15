@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, session, url_for, render_template, Response, jsonify, abort
+from flask import Flask, request, redirect, session, url_for, render_template, Response, jsonify, abort, send_file
 import requests
 import os
 import re
@@ -13,7 +13,7 @@ import db
 import json
 
 
-app = Flask(__name__, static_url_path='/static', static_folder=None)
+app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 app.secret_key = 'super-secret'
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
@@ -79,16 +79,24 @@ def status():
     data = db.get_status_updates(duration_hours=duration_hours)
     return render_template("status.html", data=data)
 
-@app.route("/wind", methods=["GET"])
-def wind():
-    duration_hours = int(request.args.get("duration", "6"))
+@app.route("/data/wind.json", methods=["GET"])
+def wind_data():
+    duration_hours = int(request.args.get("duration", "5"))
     data = {
         "avgs": db.get_avg_wind(duration_hours=duration_hours),
         "maxs": db.get_max_wind(duration_hours=duration_hours),
         "dirs": db.get_directions(duration_hours=duration_hours)
     }
 
-    return render_template("wind.html", data=data)
+    return Response(json.dumps(data), mimetype="application/json")
+
+@app.route("/wind", methods=["GET"])
+def wind():
+    return render_template("wind.html")
+
+@app.route("/windv2", methods=["GET"])
+def windv2():
+    return send_file("templates/windv2.html")
 
 @app.route("/avg", methods=["GET"])
 def avg_wind():
@@ -112,21 +120,7 @@ def max_wind():
     
     return Response(strdata, mimetype="text/plain")
 
-def angle_to_direction(angle):
-    directions = [
-        ("N", "↑"),
-        ("NW", "↖"),
-        ("W", "←"),
-        ("SW", "↙"),
-        ("S", "↓"),
-        ("SE", "↘"),
-        ("E", "→"),
-        ("NE", "↗")
-    ]
-    angle = angle % 360
-    index = int((angle + 22.5) // 45) % 8
-    name, arrow = directions[index]
-    return "{:2} {}".format(name, arrow)
+
 
 @app.route("/dir", methods=["GET"])
 def directions():
@@ -135,8 +129,7 @@ def directions():
 
     strdata = ""
     for d in data:
-        dir_name = angle_to_direction(d["value"])
-        strdata += f"{d['timestamp']}; {d['value']:3}; {dir_name}\n"
+        strdata += f"{d['timestamp']}; {d['value']:3}; {d['angle']} {d['name']:2} {d['arrow']}\n"
     
     return Response(strdata, mimetype="text/plain")
 

@@ -277,6 +277,20 @@ def get_max_wind(duration_hours=6):
 
     return data
 
+def angle_to_direction(angle):
+    directions = [
+        ("N",  "↑",   0),
+        ("NW", "↖",   1),
+        ("W",  "←",   2),
+        ("SW", "↙",   3),
+        ("S",  "↓",   4),
+        ("SE", "↘",   5),
+        ("E",  "→",   6),
+        ("NE", "↗",   7),
+    ]
+    angle = angle % 360
+    index = int((angle + 22.5) // 45) % 8
+    return  directions[index]
 
 def get_directions(duration_hours=6):
     logging.info(f"Fetching directions from the lsat {duration_hours} hours")
@@ -290,6 +304,10 @@ def get_directions(duration_hours=6):
     data = []
     for doc in cursor:
         doc['timestamp'] = doc['timestamp'].isoformat()
+        (name, arrow, angle) = angle_to_direction(doc['value'])
+        doc['name'] = name
+        doc['arrow'] = arrow
+        doc['angle'] = angle
         data.append(doc)
 
     return data

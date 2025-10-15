@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wind Station – Static Mockup</title>
+  <!-- Tailwind via CDN (no app JS) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="/efiG1YOenDEmsN6/static/js/windv2.js"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+  <!-- Header -->
+  <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <!-- Left section -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500"></div>
+        <div>
+          <h1 class="text-lg font-semibold leading-tight">Wind Station – Device #WS-042</h1>
+          <p class="text-xs text-slate-500">Radovljica · last sync 2 min ago</p>
+        </div>
+      </div>
+
+      <!-- Right section (time + unit toggle) -->
+      <div class="flex items-center gap-3">
+        <select class="px-3 py-1.5 text-sm rounded-xl border border-slate-200 bg-white">
+          <option>Last hour</option>
+          <option>Last 24 h</option>
+          <option>Last 7 days</option>
+        </select>
+
+        <!-- Local unit toggle (static visual only) -->
+        <div class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <button class="px-3 py-1.5 text-xs bg-slate-900 text-white">m/s</button>
+          <button class="px-3 py-1.5 text-xs bg-white text-slate-600">km/h</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid gap-6 md:grid-cols-3 items-start">
+    <!-- Left column: charts + wind rose (same width) -->
+    <section class="md:col-span-2 grid gap-6">
+      <!-- Wind Speed Card -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="p-1 pb-4 flex items-center justify-between gap-4">
+          <!-- Left title section -->
+          <div>
+            <h2 class="font-semibold">Wind speed</h2>
+            <p class="text-xs text-slate-500">Unit: meters per second (m/s) • toggle below (static)</p>
+          </div>
+
+          <!-- Right value section (horizontal layout) -->
+          <div class="flex items-end gap-6 text-right pr-1">
+            <!-- Average -->
+            <div>
+              <div class="text-2xl font-semibold text-sky-500/80 leading-none">2.3</div>
+              <div class="text-xs text-center text-slate-500">avg</div>
+            </div>
+            <!-- Maximum -->
+            <div>
+              <div class="text-2xl font-semibold text-rose-500/80 leading-none">4.8</div>
+              <div class="text-xs text-center text-slate-500">max</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart placeholder -->
+        <div class="relative w-full h-72 sm:h-80">
+          <canvas id="wind-chart" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+      </div>
+
+
+      <!-- Wind Direction Card -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200">
+        <div class="p-4 flex items-center justify-between">
+          <div>
+            <h2 class="font-semibold">Wind direction</h2>
+            <p class="text-xs text-slate-500">0° = North</p>
+          </div>
+          <div class="text-right">
+            <div class="text-2xl font-semibold">North</div>
+            <div class="text-xs text-slate-500">current</div>
+          </div>
+        </div>
+        <div class="relative w-full h-72 sm:h-80">
+          <canvas id="dir-chart" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+      </div>
+
+      <!-- Temperature chart -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="font-semibold">Temperature chart</h2>
+            <p class="text-xs text-slate-500">0° = North</p>
+          </div>
+          <div class="text-right">
+            <div class="text-2xl font-semibold">North</div>
+            <div class="text-xs text-slate-500">current</div>
+          </div>
+        </div>
+        <div class="px-2">
+          <canvas id="temp-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right column: device status + (moved) location/status/notes -->
+    <aside class="md:col-span-1 grid gap-6">
+
+      <!-- Wind rose over map  -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold">Wind rose · map overlay</h3>
+          <select class="px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white">
+            <option>24 h</option>
+            <option>7 d</option>
+            <option>30 d</option>
+          </select>
+        </div>
+        <!-- Map + rose placeholders -->
+        <div class="relative w-full h-72 rounded-2xl overflow-hidden border border-slate-200">
+          <!-- Map placeholder -->
+          <div class="absolute inset-0 bg-slate-100 grid place-items-center text-slate-400 text-sm">
+            Top‑down map placeholder
+          </div>
+          <!-- Rose overlay placeholder -->
+          <div class="absolute inset-0 grid place-items-center">
+            <div class="w-56 h-56 rounded-full border-2 border-dashed border-slate-300 grid place-items-center text-slate-400 text-xs bg-white/70">
+              Wind rose (placeholder)
+            </div>
+          </div>
+          <div class="absolute top-3 left-3 px-2 py-1 rounded-lg text-xs bg-white/80 border border-slate-200">N ↑</div>
+        </div>
+      </div>
+
+      <!-- Device status -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <h3 class="font-semibold mb-3">Device status</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Signal -->
+          <div class="col-span-1 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="text-xs text-slate-500">Signal</div>
+            <div class="font-semibold">-73 dBm</div>
+            <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div class="h-full w-2/3 bg-emerald-500"></div>
+            </div>
+          </div>
+          <!-- Battery -->
+          <div class="col-span-1 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="text-xs text-slate-500">Battery</div>
+            <div class="font-semibold">78%</div>
+            <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div class="h-full w-4/5 bg-amber-500"></div>
+            </div>
+          </div>
+          <!-- Solar -->
+          <div class="col-span-1 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="text-xs text-slate-500">Solar intensity</div>
+            <div class="font-semibold">640 W/m²</div>
+            <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div class="h-full w-3/4 bg-yellow-400"></div>
+            </div>
+          </div>
+          <!-- Temp -->
+          <div class="col-span-1 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="text-xs text-slate-500">Temp</div>
+            <div class="font-semibold">14.2 °C</div>
+            <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div class="h-full w-2/3 bg-sky-400"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-500">Last connection</span>
+            <span class="text-base font-semibold text-slate-800">18:07</span>
+          </div>
+<div class="flex items-center justify-between"><span class="text-slate-500">Last connection</span><span class="font-semibold text-slate-900 font-semibold">18:07</span></div>
+<div class="flex items-center justify-between"><span class="text-slate-500">FW version</span><span class="font-semibold text-slate-900 font-semibold">v1.8.3</span></div>
+<div class="flex items-center justify-between"><span class="text-slate-500">Phone</span><span class="font-semibold text-slate-900 font-semibold">+386 70 794 660</span></div>
+<div class="flex items-center justify-between"><span class="text-slate-500">Uptime</span><span class="font-semibold text-slate-900">5d 03h</span></div>
+<div class="flex items-center justify-between"><span class="text-slate-500">Device IMEI</span><span class="font-semibold text-slate-900">356789012345678</span></div>
+
+        </div>
+      </div>
+
+      <!-- Moved tiles: Location, Overall Status, Notes -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="text-sm text-slate-500">Location</div>
+        <div class="font-semibold">46.340° N, 14.173° E (Radovljica)</div>
+        <div class="mt-2 text-xs text-slate-500">Elevation 480 m</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="text-sm text-slate-500">Status</div>
+        <div class="font-semibold">Online</div>
+        <div class="mt-2 text-xs text-emerald-600">All systems nominal</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <div class="text-sm text-slate-500">Notes</div>
+        <div class="font-semibold">Placeholder text…</div>
+        <div class="mt-2 text-xs text-slate-500">Mounting pole check due: 2025‑11‑01</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
+    © 2025 Wind Station UI mockup · Designed for quick layout prototyping
+  </footer>
+</body>
+</html>

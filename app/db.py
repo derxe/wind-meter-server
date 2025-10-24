@@ -8,6 +8,7 @@ import logging
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Berlin")
+UTC = ZoneInfo("UTC")
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
 logging.info("starting connecting to MongoDB...")
@@ -40,11 +41,11 @@ def parse_saved_line(line):
         return None
     
     timestamp_str = line[:line.index("- ")].strip()
-    timestamp = datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
+    timestamp = datetime.datetime.fromisoformat(timestamp_str)
 
     data_str = line[line.index("- ")+2:].strip()
 
-    save_line(data_str, timestamp)
+    save_recived_data(data_str, timestamp)
 
 
 def save_wind_data(winds_data):
@@ -82,10 +83,8 @@ def parse_status_update(line):
     for part in line.split(";"):
         if "=" in part:
             key, val = part.split("=")
-            try:
-                data[key.strip()] = float(val)
-            except ValueError:
-                data[key.strip()] = val
+            data[key.strip()] = val
+            
         #else:
         #    print(f"No = in the status part. part:'{part}'")
 
@@ -155,13 +154,12 @@ def save_recived_data(line, timestamp):
     global base_timestamp
     base_timestamp = timestamp
 
-
     data, winds_data = parse_status_update(line)
     if not data:
         logging.warning(f"No data found in line: {line}")
         return
     
-    logging.info(f"Saving status update at {timestamp} with data: {data} and winds data: {winds_data}")
+    #logging.info(f"Saving status update at {timestamp} with data: {data} and winds data: {winds_data}")
 
     save_status_update(timestamp, data)
 
@@ -207,29 +205,52 @@ def get_vbat():
     ])
     return "vbats\n" + result_str
 
+def get_last_status():
+    cursor = db.statuses.find(
+        {},
+        {"_id": 0}
+    ).sort("timestamp", -1).limit(1)
+
+    latest_status = cursor.next() if cursor.alive else None
+
+    if latest_status:
+        latest_status['timestamp'] = latest_status['timestamp'].astimezone(TZ).isoformat()
+        return latest_status
+    else:
+        logging.warning("Unable to get last status from the DB.")
+        return None
+
+    return data
+
 def get_status_updates(duration_hours=None, fromToday=False):
     logging.info("Fetching status updates from database")
     if fromToday:
         logging.info("Fetching status updates from today")
         start_time = datetime.datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        cursor = db.status_updates.find(
+        cursor = db.statuses.find(
             {"timestamp": {"$gte": start_time}},
             {"_id": 0}
         ).sort("timestamp", -1)
     elif duration_hours:
-        logging.info(f"Fetching status updates from the last {duration_hours} hours")
         start_time = datetime.datetime.now(TZ) - datetime.timedelta(hours=duration_hours)
-        cursor = db.status_updates.find(
+        logging.info(f"Fetching status updates from the last {duration_hours} hours. Start Time: {start_time}")
+        logging.info(f"{datetime.datetime.now(TZ)}")
+        start_time_utc = start_time.astimezone(UTC)
+        logging.info(f"UTC: {start_time_utc}")
+
+        cursor = db.statuses.find(
             {"timestamp": {"$gte": start_time}},
             {"_id": 0}
         ).sort("timestamp", -1)
     else:
         logging.info("Fetching all status updates")
-        cursor = db.status_updates.find({}, {"_id": 0}).sort("timestamp", -1)
+        cursor = db.statuses.find({}, {"_id": 0}).sort("timestamp", -1)
 
+    data = []
+    for doc in cursor:
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
+        data.append(doc)
 
-    #pretyy print the results in json string with indentation
-    data = [doc for doc in cursor]
     return data
 
 def get_wind_data(duration_hours=24):
@@ -323,31 +344,26 @@ def get_n_data():
 
 if __name__ == "__main__":
    
-    """
+   # """
     db.statuses.delete_many({})
     db.wind_avgs.delete_many({})
     db.wind_maxs.delete_many({})
     db.directions.delete_many({})
-    """
-
-    """
-    with open("logs/save_prase_test.txt", "r") as f:
+    with open("logs/save.txt", "r") as f:
         for line in f:
             parse_saved_line(line.strip())
             print(".", end="", flush=True)
+   # """
 
-    """
 
-    
-    cursor = db.directions.find(
+    cursor = db.statuses.find(
         {},  # empty filter = match all
-        {"_id": 0, "timestamp": 1, "value": 1}
+        {"_id": 0, "timestamp": 1, "vbatIde": 1}
     ).sort("timestamp", 1)
 
-    result = [(doc["timestamp"], doc["value"]) for doc in cursor]
+    result = [(doc["timestamp"], doc["vbatIde"]) for doc in cursor]
     for timestamp, dir in result:
-        print(f"{timestamp};{dir}")
-
+        print(f"{timestamp.astimezone(TZ).isoformat()};{dir}")
 
     print("Number of statuses:", db.statuses.count_documents({}))
     print("Number of winds avgs:", db.wind_avgs.count_documents({}))

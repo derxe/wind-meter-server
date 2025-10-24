@@ -43,7 +43,7 @@ def clean_data(data):
     return cleaned
 
 def save_query_to_log(ip, data):
-    timestamp = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    timestamp = datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
     line = "{}- {}\n".format(timestamp, clean_data(data))
 
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
@@ -73,11 +73,10 @@ def save_data():
     db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
 
-@app.route("/status", methods=["GET"])
+@app.route("/data/status.json", methods=["GET"])
 def status():
-    duration_hours = int(request.args.get("duration", "6"))
-    data = db.get_status_updates(duration_hours=duration_hours)
-    return render_template("status.html", data=data)
+    data = db.get_last_status()
+    return Response(json.dumps(data), mimetype="application/json")
 
 @app.route("/data/wind.json", methods=["GET"])
 def wind_data():
@@ -96,7 +95,10 @@ def wind():
 
 @app.route("/windv2", methods=["GET"])
 def windv2():
-    return send_file("templates/windv2.html")
+    data = {
+        'title': 'Sv. Peter',
+    }
+    return render_template("windv2.html", **data)
 
 @app.route("/avg", methods=["GET"])
 def avg_wind():

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Available Log Files</title>
+</head>
+<body>
+<h1>Available Log Files</h1>
+
+{% if log_filenames %}
+    <ul>
+    {% for filename in log_filenames %}
+        <!-- Each filename links to the new specific log file route -->
+        <li><a href="/veter/log/{{ filename }}">{{ filename }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No log files found.</p>
+{% endif %}
+
+<hr>
+
+</body>
+</html>

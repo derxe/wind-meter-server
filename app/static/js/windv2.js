@@ -119,10 +119,13 @@ function onToggleButtons(id, listener) {
 function getWindData() {
     $.getJSON("data/wind.json", function(data) {
         $('#loading-msg').hide();
+        $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
 
         console.log('Wind data loaded:', data);
         updateWindGraph(data);
         updateDirectionGraph(data);
+
+        renderWindRose(data);
         //updateDirectionGraph2(data);
     });
 }

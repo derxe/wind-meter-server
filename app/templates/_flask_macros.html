@@ -1,0 +1,22 @@
+{% macro sleep_overlay(text='Naprava počiva 😴') -%}
+<div class="hidden absolute rounded-2xl inset-0 bg-slate-300/40 flex items-center justify-center z-10" data-overlay="sleeping">
+  <span class="text-gray-600 text-2xl font-medium px-5 py-2 rounded-2xl border border-slate-200/50 bg-slate-200/80 shadow-lg">
+    {{ text }}
+  </span>
+</div>
+{%- endmacro %}
+
+{% macro loading_overlay() -%}
+<div id="data-loading"
+     class="data-loading absolute inset-0 flex items-center justify-center z-10"
+     aria-busy="true" aria-live="polite">
+  <div class="flex items-center gap-3 text-gray-700">
+    <!-- simple spinner -->
+    <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity=".25" stroke-width="4"/>
+      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4"/>
+    </svg>
+    <span>Nalaganje…</span>
+  </div>
+</div>
+{%- endmacro %}

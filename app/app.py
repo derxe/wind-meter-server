@@ -3,6 +3,7 @@ import requests
 import os
 import re
 import time
+import glob
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from werkzeug.exceptions import HTTPException
@@ -18,7 +19,7 @@ app.secret_key = 'super-secret'
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
 
-LOG_PATH = "logs/save.txt"
+LOG_DIR = "logs/"
 
 
 @app.route("/vbats", methods=["GET"])
@@ -42,21 +43,14 @@ def clean_data(data):
             cleaned += "<{}>".format(ord(c))
     return cleaned
 
-def save_query_to_log(ip, data):
+def save_query_to_log(sender_id, data):
     timestamp = datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
     line = "{}- {}\n".format(timestamp, clean_data(data))
 
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    # Read existing content
-    if os.path.exists(LOG_PATH):
-        with open(LOG_PATH, "r") as f:
-            old_content = f.read()
-    else:
-        old_content = ""
-
-    # Prepend new line
-    with open(LOG_PATH, "w") as f:
-        f.write(line + old_content)
+    os.makedirs(LOG_DIR, exist_ok=True)
+    # append new line
+    with open(LOG_DIR + sender_id + ".txt", "a") as f:
+        f.write(line)
 
 @app.route("/save", methods=["GET", "POST"])
 def save_data():
@@ -69,9 +63,32 @@ def save_data():
     else:
         return "unknown protocol", 500
 
-    save_query_to_log(ip, data)
+    save_query_to_log("default", data)
     db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
+
+
+@app.route("/save/<sender_id>", methods=["GET", "POST"])
+def save_data_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got save request for: {sender_id}. From ip: {ip}")
+
+    if request.method == "GET":
+        data = request.query_string.decode("utf-8")
+    elif request.method == "POST":
+        data = request.get_data(as_text=True)
+    else:
+        return "unknown protocol", 500
+
+    save_query_to_log(sender_id, data)
+    #db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+    response = f"saved: {len(data)}\n"
+    #response += f"prefs:\n"
+    #response += f"sleep_hour_start:0\n"
+    #response += f"sleep_hour_end:0\n"
+    return Response(response, mimetype="text/plain")
+
+
 
 @app.route("/data/status.json", methods=["GET"])
 def status():
@@ -97,6 +114,15 @@ def wind():
 def windv2():
     data = {
         'title': 'Sv. Peter',
+        'statusData': db.get_last_status(),
+    }
+    return render_template("windv2.html", **data)
+
+@app.route("/peter", methods=["GET"])
+def wind_peter():
+    data = {
+        'title': 'Sv. Peter',
+        'statusData': db.get_last_status(),
     }
     return render_template("windv2.html", **data)
 
@@ -137,25 +163,96 @@ def directions():
 
 
 def get_n_lines(file_name, n):
-    lines = []
-    with open(file_name, "r") as f:
-        for _ in range(n):
-            try:
-                lines.append(next(f))
-            except StopIteration:
-                break
+    """
+    Reads the content of a file and returns only the last 'n' lines.
     
-    return "\n".join(lines)
+    If the file has fewer than 'n' lines, all lines are returned.
+    This is an efficient way to get the end of a file in Python.
+    """
+    try:
+        with open(file_name, "r") as f:
+            # Read all lines into a list
+            all_lines = f.readlines()
+            
+            # Use negative slicing [-n:] to get the last N lines.
+            # We join with "" because readlines() preserves the original newline characters.
+            last_n_lines = []
+            for i in range(1, n):
+                last_n_lines.append(all_lines[-i])
+            
+        # Join the list of lines back into a single string
+        return "\n".join(last_n_lines)
+    except Exception as e:
+        return f"ERROR reading file: {e}"
 
-@app.route("/len", methods=["GET"])
-def get_len():
-    return Response(json.dumps(db.get_n_data()), mimetype="application/json")
+
+def get_safe_log_path(filename):
+    """
+    Constructs the absolute path and checks if it's securely inside the LOG_DIR.
+    This prevents directory traversal attacks.
+    """
+    filepath = os.path.join(LOG_DIR, filename)
+    
+    # Absolute path check
+    abs_filepath = os.path.abspath(filepath)
+    abs_log_dir = os.path.abspath(LOG_DIR)
+    
+    # Check if the constructed path is a subpath of the log directory
+    if not abs_filepath.startswith(abs_log_dir):
+        return None 
+        
+    return filepath
+
+# --- Flask Routes ---
 
 @app.route("/log", methods=["GET"])
-def get_log():
-    log_content = get_n_lines(LOG_PATH, 20)
-    return Response(log_content, mimetype="text/plain")
+def get_log_list():
+    """
+    Displays an HTML page listing all available log files as links.
+    """
+    if not os.path.isdir(LOG_DIR):
+        return render_template("log.html", log_filenames=[])
 
+    log_file_paths = glob.glob(os.path.join(LOG_DIR, "*"))
+    log_filenames = sorted([os.path.basename(p) for p in log_file_paths])
+    
+    return render_template("log.html", log_filenames=log_filenames)
+
+
+@app.route("/log/<filename>", methods=["GET"])
+def get_specific_log(filename):
+    """
+    Reads and returns the content of a specific log file, defaulting to the last 20 lines.
+    Use ?lines=<n> query parameter to change the number of lines.
+    """
+    filepath = get_safe_log_path(filename)
+    
+    if not filepath or not os.path.exists(filepath):
+        abort(404, description=f"Log file '{filename}' not found or path is invalid.")
+        
+    # Get the 'lines' query parameter, default to 20 if not provided
+    # Ensure it's a positive integer
+    n_lines = 20 # Default value
+    try:
+        requested_lines = request.args.get('lines')
+        if requested_lines is not None:
+            n_lines = max(1, int(requested_lines))
+    except ValueError:
+        pass # Keep default if value is invalid
+        
+    
+    content = get_n_lines(filepath, n_lines)
+            
+    # Return the content as plain text
+    return Response(content, mimetype="text/plain")
+
+
+
+@app.route("/log/<log_name>", methods=["GET"])
+def get_log(log_name):
+    log_content = get_n_lines(LOG_DIR + log_name, 20)
+    return Response(log_content, mimetype="text/plain")
+    return render_template("log.html", log_filenames=log_filenames)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

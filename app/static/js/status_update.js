@@ -5,13 +5,23 @@ $(function() {
 });
 
 function getStatus() {
+  if (preloadedStatusData) {
+    // if preloadedStatusData exist load that data instead of getting query for it 
+    displayStatusData(preloadedStatusData);
+  } else {
     $.getJSON("data/status.json", function(data) {
-        $('#loading-status-msg').hide();
-
-        console.log('Got new status:', data);
-        setStatuionParametersPannel(data);
-        updateStatusPannel(data);
+      console.log(data)
+      displayStatusData(data);
     });
+  }
+}
+
+function displayStatusData(data) {
+  $('#loading-status-msg').hide();
+
+  console.log('Got new status:', data);
+  setStatuionParametersPannel(data);
+  updateStatusPannel(data);
 }
 
 function toggleOverlay(type, show) {
@@ -46,6 +56,7 @@ function formattedTime(isoString) {
 }
 
 function isDeviceSleeping() {
+  return false;
   const now = new Date();
   const hour = now.getHours();
   // Sleeping between 20:00 and 06:00 
@@ -62,7 +73,7 @@ function updateStatusPannel(data) {
   let detailsText = "";
   let statusClass = "offline"
   if(timeSinceLastSend < 22) {
-    bubleText = ""
+    bubleText = "vse ok"
     titleText = "Deluje"
     statusClass = "ok"
   } else if(timeSinceLastSend >= 22) {

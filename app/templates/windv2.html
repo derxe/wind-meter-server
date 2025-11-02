@@ -1,4 +1,4 @@
-{% from 'sleep_overlay.html' import sleep_overlay %}
+{% from '_flask_macros.html' import sleep_overlay, loading_overlay %}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -13,8 +13,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="/efiG1YOenDEmsN6/static/js/status_update.js"></script>
-  <script src="/efiG1YOenDEmsN6/static/js/windv2.js"></script>
+  <script src="/veter/static/js/wind_rose.js"></script>
+  <script src="/veter/static/js/status_update.js"></script>
+  <script src="/veter/static/js/windv2.js"></script>
 
   <style>
     /* === Shared === */
@@ -50,6 +51,10 @@
     .status-card.non-responsive .status-dot  { background-color: rgb(251, 191, 36); }       /* amber-400 */
   </style>
 </head>
+
+<script>
+  preloadedStatusData =  {{ statusData | tojson }}; 
+</script>
 <body class="min-h-screen bg-indigo-50 text-slate-900"> <!-- bg-sky-100 -->
   <!-- Header -->
   <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-slate-200">
@@ -65,7 +70,7 @@
 
   <!-- Content -->
   <main class="max-w-7xl mx-auto px-1 lg:px-6 py-6 grid gap-6 lg:grid-cols-3 items-start">
-    <div class="status-card sleeping relative lg:col-span-3 mx-auto w-full lg:w-1/2">
+    <div class="status-card offline relative lg:col-span-3 mx-auto w-full lg:w-1/2">
      <div class="status-bar bg-black absolute left-[-3px] top-0 bottom-0 w-[15px] rounded-l-2xl"></div>
      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         
@@ -75,12 +80,12 @@
 
           <span class="status-badge inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
             <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
-            <span id="status-bubble-text">OK / operational</span>
+            <span id="status-bubble-text"></span>
           </span>
         </div>
 
-        <div id="status-title-text" class="mt-1 font-semibold text-slate-800">All systems nominal</div>
-        <div id="status-detailed-text" class="mt-2 text-xs text-slate-500">Uptime 3d 14h • Last check 2 min ago</div>
+        <div id="status-title-text" class="mt-1 font-semibold text-slate-800">Loading status ...</div>
+        <div id="status-detailed-text" class="mt-2 text-xs text-slate-500">---</div>
       </div>
     </div> 
 
@@ -92,7 +97,7 @@
 
         <div class="p-1 pb-2 flex justify-between gap-4 pr-2">
           <div>
-            <h2 class="font-semibold text-l">Hitrost vetra</h2>
+            <h2 class="font-semibold text-base">Hitrost vetra</h2>
           </div>
 
           <div class="flex items-end gap-4 text-right pr-1">
@@ -114,20 +119,25 @@
           </div>
         </div>
 
+        
         <div class="relative w-full md:h-[25rem] h-60">
+          {{ loading_overlay() }}
+
           <canvas id="wind-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
       </div>
       
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <div class="flex flex-wrap justify-center items-center gap-4 text-center">
-        <div class="inline-flex text-l text-slate-500">Nastavitve prikaza:</div>
+        <div class="inline-flex text-base text-slate-500">Nastavitve prikaza:</div>
 
+        <!--
         <select class="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white">
           <option>Last hour</option>
           <option>Last 24 h</option>
           <option>Last 7 days</option>
         </select>
+        -->
 
         <div id="toggle-buttons-speed" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="ms">m/s</button>
@@ -155,6 +165,8 @@
           </div>
         </div>
         <div class="relative w-full md:h-[25rem] h-60">
+          {{ loading_overlay() }}
+
           <canvas id="dir-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
       </div>
@@ -176,39 +188,85 @@
         </div>
       </div>
           -->
+
+
     </section>
 
 
     <!-- Right column: device status + (moved) location/status/notes -->
     <aside class="lg:col-span-1 grid gap-6">
-  
-      <!-- Wind rose over map  -->
-      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
-        {{ sleep_overlay() }}
-
+      
+            <!-- Wind rose over map  -->
+      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4 ">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="font-semibold">Wind rose · map overlay</h3>
-          <select class="px-2 py-1 text-xs rounded-lg border border-slate-200 bg-white">
-            <option>24 h</option>
-            <option>7 d</option>
-            <option>30 d</option>
-          </select>
+          <h3 class="pl-1 font-semibold">Vetrna roža</h3>
+
+         
         </div>
+
+      
+
+        <input id="time-slider" class="hidden" type="range" min="1" max="300" step="10" value="20" />
+
         <!-- Map + rose placeholders -->
-        <div class="relative w-full h-72 rounded-2xl overflow-hidden border border-slate-200">
+        <div class="relative flex items-center justify-center w-full rounded-2xl overflow-hidden border border-slate-200">
+          
+          <img src="/veter/static/img/peter_wide.jpg" class="absolute inset-0 h-full w-full object-cover z-1"/>
+
           <!-- Map placeholder -->
-          <div class="absolute inset-0 bg-slate-100 grid place-items-center text-slate-400 text-sm">
-            Top‑down map placeholder
+          <div class="relative h-96 aspect-square ">
+            
+            <canvas width=800 height=800 id="wind-rose" class="block relative z-2 w-full h-auto "></canvas>
+            <div id="tooltip" class="tooltip"></div>
           </div>
-          <!-- Rose overlay placeholder -->
-          <div class="absolute inset-0 grid place-items-center">
-            <div class="w-56 h-56 rounded-full border-2 border-dashed border-slate-300 grid place-items-center text-slate-400 text-xs bg-white/70">
-              Wind rose (placeholder)
-            </div>
-          </div>
-          <div class="absolute top-3 left-3 px-2 py-1 rounded-lg text-xs bg-white/80 border border-slate-200">N ↑</div>
         </div>
+
+        <div class="pt-2 w-100 text-center text-sm text-slate-500">
+          Razpon prikazanih vrednosti od <b id="rose-data-start">--:--</b> do <b id="rose-data-end">--:--</b>
+        </div>
+
+        <div class="pt-1 flex justify-center items-end gap-6 text-right pr-1">
+           
+          <div class="flex flex-col items-center space-y-1">
+            <select id="rose-duration-select" class="px-2 py-1 w-24 h-[2.1rem] text-xs rounded-lg border border-slate-200 bg-white">
+              <option value="10" >10 min</option>
+              <option value="20" >20 min</option>
+              <option value="30" >30 min</option>
+              <option value="60" selected>1 ura</option>
+              <option value="120">2 uri</option>
+              <option value="180">3 ure</option>
+              <option value="360">6 ur</option>
+              <option value="720">12 ur</option>
+              <option value="1440">24 ur</option>
+            </select>
+            <span class="pt-1 text-sm text-slate-500">časovni obseg</span>
+          </div>
+          
+          <div class="flex flex-col items-center space-y-1">
+            <div class="inline-flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
+              <button id="rose-dec-delay" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"></path>
+                </svg>
+              </button>
+
+              <div class="px-2 h-full text-slate-700 bg-white border-x border-slate-200 text-sm text-center min-w-[2.5rem]">
+                <span id="rose-delay-value" class="font-semibold text-sm">0</span><span id="rose-delay-unit" class="text-xs ml-1">min</span> 
+              </div>
+
+              <button id="rose-inc-delay" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </button>
+            </div>
+            <span class="pt-1 text-sm text-slate-500">zamik prikaza</span>
+          </div>
+          </div>
+
+          
       </div>
+
 
       <!-- Device Status -->
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
@@ -225,6 +283,7 @@
       </div>
 
       <!-- Moved tiles: Location, Overall Status, Notes -->
+      <!--
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <div class="text-sm text-slate-500">Location</div>
         <div class="font-semibold">46.340° N, 14.173° E (Radovljica)</div>
@@ -235,6 +294,7 @@
         <div class="font-semibold">Placeholder text…</div>
         <div class="mt-2 text-xs text-slate-500">Mounting pole check due: 2025‑11‑01</div>
       </div>
+      -->
     </aside>
   </main>
 

@@ -1,23 +1,76 @@
 services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+
+      # Entrypoints
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+
+      # NO global redirect here
+
+      # Let's Encrypt for your domain on :443
+      - --certificatesresolvers.letsencrypt.acme.email=you@example.com
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - 4123:80
+    volumes:
+      - ../static-html:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/nginx:/var/log/nginx
+    # no public ports; Traefik fronts it
+    labels:
+      - traefik.enable=true
+
+      # A) Domain → HTTPS (LE cert)
+      - traefik.http.routers.site-https.rule=Host(`to-ni.dev`)
+      - traefik.http.routers.site-https.entrypoints=websecure
+      - traefik.http.routers.site-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.site-https.priority=100
+      - traefik.http.services.site.loadbalancer.server.port=80
+
+      # Optional: HTTP->HTTPS only for your domain
+      - traefik.http.routers.site-http.rule=Host(`to-ni.dev`)
+      - traefik.http.routers.site-http.entrypoints=web
+      - traefik.http.routers.site-http.middlewares=redir-https@docker
+      - traefik.http.routers.site-http.service=noop@internal
+      - traefik.http.middlewares.redir-https.redirectscheme.scheme=https
+
+      # B) IP (or any Host) → HTTP (no TLS), lower priority than domain
+      - traefik.http.routers.site-ip-http.rule=PathPrefix(`/`)
+      - traefik.http.routers.site-ip-http.entrypoints=web
+      - traefik.http.routers.site-ip-http.priority=1
+      - traefik.http.routers.site-ip-http.service=site@docker
+    depends_on:
+      - flask-app
+    restart: unless-stopped
+
   flask-app:
     build: ./app
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
     volumes:
       - ./app:/app:rw
-    ports:
-      - "127.0.0.1:5000:5000"
-
-  nginx:
-    image: nginx:latest
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./logs:/var/log/nginx
-    ports:
-      - "80:80"
-      - "4123:80"
+    # No public ports; only Nginx talks to Flask
     depends_on:
-      - flask-app
+      - mongo
+    restart: unless-stopped
 
   mongo:
     image: mongo:6
@@ -29,7 +82,6 @@ services:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=3SOWk2YyRtBOkP5wVmnw
     restart: always
-
 
 volumes:
   mongodb_data:

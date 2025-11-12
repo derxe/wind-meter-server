@@ -1,11 +1,12 @@
 import re
-import datetime
+from datetime import datetime, time, timedelta
 import json
 from pymongo import MongoClient
 import os
 import sys
 import logging 
 from zoneinfo import ZoneInfo
+import pprint
 
 TZ = ZoneInfo("Europe/Berlin")
 UTC = ZoneInfo("UTC")
@@ -21,7 +22,7 @@ logging.info(f"Using MongoDB URI: {url}")
 client = MongoClient(url)
 # print the MongoDB URI being used
 logging.info("connected to MongoDB")
-db = client["weather_station"]
+db = client["weather_station_v2"]
 
 
 def save_status_update(timestamp, data):
@@ -35,32 +36,16 @@ def save_status_update(timestamp, data):
 
 base_timestamp = None
 
-# parsed saved line from the file, the lines in the file has timestamp appended 
-def parse_saved_line(line):
-    if "- " not in line:
-        return None
-    
-    timestamp_str = line[:line.index("- ")].strip()
-    timestamp = datetime.datetime.fromisoformat(timestamp_str)
-
-    data_str = line[line.index("- ")+2:].strip()
-
-    save_recived_data(data_str, timestamp)
-
-
 def save_wind_data(winds_data):
     if not winds_data:
         print("No wind data to save")
         return
 
-    if len(winds_data["avgs"]) > 0:
-        db.wind_avgs.insert_many(winds_data["avgs"])
-
-    if len(winds_data["maxs"]) > 0:
-        db.wind_maxs.insert_many(winds_data["maxs"])
+    if len(winds_data["winds"]) > 0:
+        db.winds.insert_many(winds_data["winds"])
 
     if len(winds_data["dirs"]) > 0:
-        db.directions.insert_many(winds_data["dirs"]) 
+        db.dirs.insert_many(winds_data["dirs"]) 
 
 def get_array_from_status_data(data, key):
     if key not in data:
@@ -78,7 +63,40 @@ def get_array_from_status_data(data, key):
 
     return array
 
-def parse_status_update(line):
+
+def generate_times(base_ts, start_s: int, end_s: int, count: int):
+    """
+    Generate `count` equally spaced datetimes between start_s and end_s (seconds since midnight),
+    inclusive. Keeps the date (and tzinfo) from base_ts. Assumes both times are within the same day
+    and 0 <= start_s <= end_s <= 86400.
+    """
+    if isinstance(base_ts, str):
+        base_ts = datetime.fromisoformat(base_ts)
+
+    if count < 1:
+        return []
+
+    # Basic validation to avoid crossing days (no wrapping)
+    if not (0 <= start_s <= end_s <= 24 * 60 * 60):
+        raise ValueError("start_s and end_s must satisfy 0 <= start_s <= end_s <= 86400.")
+
+    # Build the sequence of second offsets (inclusive endpoints)
+    if count == 1:
+        secs = [start_s]
+    else:
+        step = (end_s - start_s) / (count - 1)
+        secs = [round(start_s + i * step) for i in range(count)]
+
+    # Combine same date + generated time-of-day; preserve tzinfo
+    base_date = base_ts.date()
+    tz = base_ts.tzinfo
+    day_start = datetime.combine(base_date, time(0, 0, 0, tzinfo=tz))
+
+    return [day_start + timedelta(seconds=s) for s in secs]
+
+
+
+def parse_status_update(line, base_ts):
     data = {}
     for part in line.split(";"):
         if "=" in part:
@@ -88,18 +106,28 @@ def parse_status_update(line):
         #else:
         #    print(f"No = in the status part. part:'{part}'")
 
+    requiredFields = ["logFirst", "logLast", "len", "avg", "dir"]
+
+    missing = [f for f in requiredFields if f not in data]
+    if missing:
+        print(f"Required fields to parse wind data are missing: {missing}. Data: {data}")
+        return data, None
+
     # get arrays and remove the keys 
     # extract the avg,max and dir arrays from the data and convert them to array 
-    winds_avg = get_array_from_status_data(data, "avg") 
-    winds_max = get_array_from_status_data(data, "max") 
-    winds_times = get_array_from_status_data(data, "windTimes") 
-    dirs = get_array_from_status_data(data, "dirs")
-    dirs_times = get_array_from_status_data(data, "dirTimes")   
+    winds = get_array_from_status_data(data, "avg") 
+    dirs = get_array_from_status_data(data, "dir")
+    #pprint.pprint(data)
+    timestamps = generate_times(base_ts, int(data["logFirst"]), int(data["logLast"]), int(data["len"]))
+    data.pop("logFirst", None)
+    data.pop("logLast", None)
+    data.pop("len", None)
+
+    #pprint.pprint(timestamps)
     
     winds_data = {
-        "avgs": set_timestamps_to_data(winds_avg, winds_times),
-        "maxs": set_timestamps_to_data(winds_max, winds_times),
-        "dirs": set_timestamps_to_data(dirs, dirs_times),
+        "winds": set_timestamps_to_data(winds, timestamps),
+        "dirs": set_timestamps_to_data(dirs, timestamps),
     }
 
     return data, winds_data
@@ -135,12 +163,10 @@ def set_timestamps_to_data(data, timestamps):
         return []
     
     data_with_timestamps = []
-    timestamp = 0
     for i in range(len(data)):
-        timestamp += int(timestamps[i]) if i > 0 else int(timestamps[0])
         data_with_timestamps.append({
             "value": data[i],
-            "timestamp": merge_timestamps(base_timestamp, timestamp)
+            "timestamp": timestamps[i]
         })
 
     return data_with_timestamps
@@ -151,10 +177,7 @@ def save_recived_data(line, timestamp):
         logging.warning("No line or timestamp to save")
         return
 
-    global base_timestamp
-    base_timestamp = timestamp
-
-    data, winds_data = parse_status_update(line)
+    data, winds_data = parse_status_update(line, timestamp)
     if not data:
         logging.warning(f"No data found in line: {line}")
         return
@@ -200,25 +223,6 @@ def get_vbat():
         "{};{}".format(
             doc["timestamp"].astimezone(TZ).isoformat(),
             doc.get("vbatIde", "")
-        )
-        for doc in cursor
-    ])
-    return result_str
-
-def get_durations():
-    logging.info("Fetching vbat data from database")
-    logging.info(f"n docs {db.statuses.count_documents({})}")
-
-    cursor = db.statuses.find(
-        {}, {"_id": 0, "timestamp": 1, "regDur": 1, "gprsRegDur": 1, "dur": 1}
-    ).sort("timestamp", -1)
-
-    result_str = "\n".join([
-        "{};{};{};{}".format(
-            doc["timestamp"].astimezone(TZ).isoformat(),
-            doc.get("regDur", ""),
-            doc.get("gprsRegDur", ""),
-            doc.get("dur", "")
         )
         for doc in cursor
     ])
@@ -272,50 +276,22 @@ def get_status_updates(duration_hours=None, fromToday=False):
 
     return data
 
-def get_wind_data(duration_hours=24):
+def get_wind(duration_hours=6):
     logging.info(f"Fetching wind data from the lsat {duration_hours} hours")
-    start_time = datetime.datetime.now(TZ) - datetime.timedelta(hours=duration_hours)
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     
-    cursor = db.wind_avgs.find(
-        {"timestamp": {"$gte": start_time}},
-        {"_id": 0}
-    ).sort("timestamp", -1)
-
-    #data = ",".join([str(doc["average"]) for doc in cursor])
-    data = [doc for doc in cursor]
-    return data
-
-def get_avg_wind(duration_hours=6):
-    logging.info(f"Fetching avg wind data from the lsat {duration_hours} hours")
-    start_time = datetime.datetime.now(TZ) - datetime.timedelta(hours=duration_hours)
-    
-    cursor = db.wind_avgs.find(
+    cursor = db.winds.find(
         {"timestamp": {"$gte": start_time}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
     data = []
     for doc in cursor:
-        doc['timestamp'] = doc['timestamp'].isoformat()
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
         data.append(doc)
 
     return data
 
-def get_max_wind(duration_hours=6):
-    logging.info(f"Fetching max wind data from the lsat {duration_hours} hours")
-    start_time = datetime.datetime.now(TZ) - datetime.timedelta(hours=duration_hours)
-    
-    cursor = db.wind_maxs.find(
-        {"timestamp": {"$gte": start_time}},
-        {"_id": 0, "timestamp": 1, "value": 1}
-    ).sort("timestamp", -1)
-
-    data = []
-    for doc in cursor:
-        doc['timestamp'] = doc['timestamp'].isoformat()
-        data.append(doc)
-
-    return data
 
 def angle_to_direction(angle):
     directions = [
@@ -334,19 +310,19 @@ def angle_to_direction(angle):
 
 def get_directions(duration_hours=6):
     logging.info(f"Fetching directions from the lsat {duration_hours} hours")
-    start_time = datetime.datetime.now(TZ) - datetime.timedelta(hours=duration_hours)
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     
-    cursor = db.directions.find(
+    cursor = db.dirs.find(
         {"timestamp": {"$gte": start_time}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
     data = []
     for doc in cursor:
-        doc['timestamp'] = doc['timestamp'].isoformat()
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
         (name, arrow, angle) = angle_to_direction(doc['value'])
-        doc['name'] = name
-        doc['arrow'] = arrow
+        #doc['name'] = name
+        #doc['arrow'] = arrow
         doc['angle'] = angle
         data.append(doc)
 
@@ -355,39 +331,59 @@ def get_directions(duration_hours=6):
 def get_n_data():
     return {
         "statuses": db.statuses.count_documents({}),
-        "wind_avgs": db.wind_avgs.count_documents({}),
-        "wind_maxs": db.wind_maxs.count_documents({}),
-        "directions": db.directions.count_documents({})
+        "winds": db.winds.count_documents({}),
+        "directions": db.dirs.count_documents({}),
     }
+
+
+# parsed saved line from the file, the lines in the file has timestamp appended 
+def parse_saved_line(line):
+    if "- " not in line:
+        return None
+    
+    timestamp_str = line[:line.index("- ")].strip()
+    timestamp = datetime.fromisoformat(timestamp_str)
+
+    data_str = line[line.index("- ")+2:].strip()
+
+    save_recived_data(data_str, timestamp)
 
 
 if __name__ == "__main__":
    
    # """
     db.statuses.delete_many({})
-    db.wind_avgs.delete_many({})
-    db.wind_maxs.delete_many({})
-    db.directions.delete_many({})
-    with open("logs/save.txt", "r") as f:
+    db.winds.delete_many({})
+    db.dirs.delete_many({})
+    with open("logs/293400130492916.txt", "r") as f:
         for line in f:
             parse_saved_line(line.strip())
             print(".", end="", flush=True)
    # """
 
-
+    """
     cursor = db.statuses.find(
-        {},  # empty filter = match all
-        {"_id": 0, "timestamp": 1, "vbatIde": 1}
-    ).sort("timestamp", 1)
+            {},  # empty filter = match all
+            {"_id": 0, "timestamp": 1, "vbatIde": 1}
+        ).sort("timestamp", 1)
 
     result = [(doc["timestamp"], doc["vbatIde"]) for doc in cursor]
     for timestamp, dir in result:
         print(f"{timestamp.astimezone(TZ).isoformat()};{dir}")
+    """
+    cursor = db.winds.find(
+        {},  # match all
+        {"_id": 0, "timestamp": 1, "value": 1}
+    ).sort("timestamp", 1)
+
+    result = [(doc["timestamp"], doc["value"]) for doc in cursor]
+    #for timestamp, value in result:
+    #    print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
+
 
     print("Number of statuses:", db.statuses.count_documents({}))
-    print("Number of winds avgs:", db.wind_avgs.count_documents({}))
-    print("Number of winds maxs:", db.wind_maxs.count_documents({}))
-    print("Number of directions:", db.directions.count_documents({}))
+    print("Number of winds:", db.winds.count_documents({}))
+    print("Number of dirs:", db.dirs.count_documents({}))
 
     #print("Parsed Status Update:")
     #print(json.dumps(parse_status_update(line), indent=2))

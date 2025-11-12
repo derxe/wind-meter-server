@@ -6,5 +6,5 @@ COPY . .
 #RUN addgroup --system docker && adduser --disabled-password --gecos '' flaskuser && adduser flaskuser docker
 #USER flaskuser
 EXPOSE 5000
-#CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+#CMD ["python", "app.py"]

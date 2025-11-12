@@ -93,7 +93,7 @@
     <section class="lg:col-span-2 grid gap-6">
       <!-- Wind Speed Card -->
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
-        {{ sleep_overlay() }}
+        <!--{{ sleep_overlay() }}-->
 
         <div class="p-1 pb-2 flex justify-between gap-4 pr-2">
           <div>
@@ -129,31 +129,33 @@
       
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <div class="flex flex-wrap justify-center items-center gap-4 text-center">
-        <div class="inline-flex text-base text-slate-500">Nastavitve prikaza:</div>
+          <div class="inline-flex text-base text-slate-500 max-sm:justify-center max-sm:w-full">Nastavitve prikaza:</div>
 
-        <!--
-        <select class="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white">
-          <option>Last hour</option>
-          <option>Last 24 h</option>
-          <option>Last 7 days</option>
-        </select>
-        -->
+          <select id="select-display-duration" class="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white">
+              <option value="1">1 ura</option>
+              <option value="3">3 ure</option>
+              <option value="6" selected>6 ur</option>
+              <option value="12">12 ur</option>
+              <option value="24">24 ur</option>
+              <option value="48">2 dni</option>
+              <!--<option value="168">7 dni</option>-->
+          </select>
 
-        <div id="toggle-buttons-speed" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="ms">m/s</button>
-          <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="kmh">km/h</button>
-        </div>
+          <div id="toggle-buttons-speed" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="ms">m/s</button>
+            <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="kmh">km/h</button>
+          </div>
 
-        <div id="toggle-buttons-detail" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="simple" >enostaven</button>
-          <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="detailed">podroben</button>
-        </div>
+          <div id="toggle-buttons-detail" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="simple" >enostaven</button>
+            <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="detailed">podroben</button>
+          </div>
       </div>
     </div>
 
       <!-- Wind Direction Card -->
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
-        {{ sleep_overlay() }}
+        <!--{{ sleep_overlay() }}-->
 
         <div class="p-1 pb-2 flex justify-between gap-4">
           <div>
@@ -270,7 +272,7 @@
 
       <!-- Device Status -->
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
-        {{ sleep_overlay() }}
+        <!--{{ sleep_overlay() }}-->
 
         <h3 class="font-semibold mb-3">Parametri postaje</h3>
         <span id="loading-status-msg">Loading status ...</span>
@@ -299,7 +301,7 @@
   </main>
 
   <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
-    © 2025 Wind Station UI mockup · Designed for quick layout prototyping
+    © 2025 Paraglidng Wind Station · Made with flying in mind 🪂 ❤️
   </footer>
 </body>
 </html>

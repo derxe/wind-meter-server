@@ -56,7 +56,6 @@ function formattedTime(isoString) {
 }
 
 function isDeviceSleeping() {
-  return false;
   const now = new Date();
   const hour = now.getHours();
   // Sleeping between 20:00 and 06:00 
@@ -89,7 +88,7 @@ function updateStatusPannel(data) {
   if(isDeviceSleeping()) {
     bubleText = "Zzzz Zzzzz..."
     titleText = "Naprava počiva 😴 😴"
-    detailsText = `Naprava ne pošilja podatkov zvečer med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
+    detailsText = `Naprava ne pošilja podatkov zvečer med <b>7 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
     statusClass = "sleeping"
   }
 

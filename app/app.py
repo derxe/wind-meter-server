@@ -10,7 +10,8 @@ from werkzeug.exceptions import HTTPException
 import string
 import logging
 from pymongo import MongoClient
-import db
+#import db
+import db_v2 as db
 import json
 
 
@@ -80,12 +81,20 @@ def save_data_sender_id(sender_id):
     else:
         return "unknown protocol", 500
 
-    save_query_to_log(sender_id, data)
-    #db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     response = f"saved: {len(data)}\n"
+
+    save_query_to_log(sender_id, data)
+    try:
+        db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+    except Exception as e:
+        print(f"[ERROR] Failed to save received data: {e}")
+        response += "error parsing data"
+
     #response += f"prefs:\n"
-    #response += f"sleep_hour_start:0\n"
-    #response += f"sleep_hour_end:0\n"
+    #response += f"pref_version:3\n"
+    #response += f"sleep_enabled:1\n"
+    #response += f"sleep_hour_start:19\n"
+    #response += f"sleep_hour_end:6\n"
     return Response(response, mimetype="text/plain")
 
 
@@ -97,10 +106,9 @@ def status():
 
 @app.route("/data/wind.json", methods=["GET"])
 def wind_data():
-    duration_hours = int(request.args.get("duration", "5"))
+    duration_hours = float(request.args.get("duration", "2"))
     data = {
-        "avgs": db.get_avg_wind(duration_hours=duration_hours),
-        "maxs": db.get_max_wind(duration_hours=duration_hours),
+        "winds": db.get_wind(duration_hours=duration_hours),
         "dirs": db.get_directions(duration_hours=duration_hours)
     }
 
@@ -125,6 +133,16 @@ def wind_peter():
         'statusData': db.get_last_status(),
     }
     return render_template("windv2.html", **data)
+
+@app.route("/vbats", methods=["GET"])
+def get_vbats():
+    strdata = db.get_vbat()
+    return Response(strdata, mimetype="text/plain")
+
+@app.route("/durations", methods=["GET"])
+def get_durs():
+    strdata = db.get_durations()
+    return Response(strdata, mimetype="text/plain")
 
 @app.route("/avg", methods=["GET"])
 def avg_wind():
@@ -177,7 +195,7 @@ def get_n_lines(file_name, n):
             # Use negative slicing [-n:] to get the last N lines.
             # We join with "" because readlines() preserves the original newline characters.
             last_n_lines = []
-            for i in range(1, n):
+            for i in range(1, min(n, len(all_lines))):
                 last_n_lines.append(all_lines[-i])
             
         # Join the list of lines back into a single string

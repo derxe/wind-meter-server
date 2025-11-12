@@ -1,7 +1,15 @@
 console.log("wind.js loaded");
 
 let unit="ms"
+let displayDuration;
 $(function() {
+    displayDuration = $('#select-display-duration').val();
+    console.log("Display duration:", displayDuration);
+    $('#select-display-duration').on('change', function () {
+      displayDuration = parseInt($(this).val(), 10);
+      console.log("Display duration:", displayDuration);
+      getWindData();
+    });
     getWindData();
 
     onToggleButtons("toggle-buttons-speed", (selectedValue) => {
@@ -16,16 +24,35 @@ $(function() {
       console.log("Selected:", selectedValue);
 
       if(selectedValue == "detailed") {
-        unhideDatasetsKeepScale(windChart, [2, 3], [0, 1]);
+        unhideDatasetsKeepScale(windChart, [2], [0, 1]);
         unhideDatasetsKeepScale(dirChart, [1], [0]);
       } else {
-        unhideDatasetsKeepScale(windChart, [0, 1], [2, 3]);
+        unhideDatasetsKeepScale(windChart, [0, 1], [2]);
         unhideDatasetsKeepScale(dirChart, [0], [1]);
       }
       windChart.update();
     })
-
 });
+
+function getWindData() {
+  $('#loading-msg').show();
+  $('#wind-chart').hide();
+  $('#dir-chart').hide();
+  $('.data-loading').removeClass('hidden').attr('aria-busy', 'true');
+  $.getJSON(`data/wind.json?duration=${displayDuration}`, function(data) {
+      $('#loading-msg').hide();
+      $('#wind-chart').show();
+      $('#dir-chart').show();
+      $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
+
+      console.log('Wind data loaded:', data);
+      updateWindGraph(data);
+      updateDirectionGraph(data);
+
+      renderWindRose(data);
+      //updateDirectionGraph2(data);
+  });
+}
 
 function updateMaxAvgUnit() {
   if (unit === "kmh") {
@@ -44,9 +71,11 @@ function updateMaxAvgUnit() {
 
 
 let msStepSize = 0; // m/s step size so that we can restore it when toggling back to m/s
+let def_yScaleTicksCallback;
 function updateGraphUnit() {
   const yScale = windChart.options.scales.y;
   const tooltip = windChart.options.plugins.tooltip.callbacks;
+  if(!def_yScaleTicksCallback) def_yScaleTicksCallback = yScale.ticks.callback;
 
   if (unit === "kmh") {
     yScale.ticks.callback = (v) => (v * 3.6).toFixed(0) + "";
@@ -56,7 +85,9 @@ function updateGraphUnit() {
     msStepSize = yScale.ticks.stepSize;
     yScale.ticks.stepSize = step / 3.6;
   } else {
-    yScale.ticks.callback = (v) => v.toFixed(0) + "";
+    if(def_yScaleTicksCallback) yScale.ticks.callback = def_yScaleTicksCallback;
+    else yScale.ticks.callback = (v) => v.toFixed(0) + "";
+
     tooltip.label = (ctx) => ctx.parsed.y.toFixed(1) + " m/s";
 
     yScale.ticks.stepSize = msStepSize;
@@ -116,19 +147,6 @@ function onToggleButtons(id, listener) {
 
 }
 
-function getWindData() {
-    $.getJSON("data/wind.json", function(data) {
-        $('#loading-msg').hide();
-        $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
-
-        console.log('Wind data loaded:', data);
-        updateWindGraph(data);
-        updateDirectionGraph(data);
-
-        renderWindRose(data);
-        //updateDirectionGraph2(data);
-    });
-}
 
 function subtractHours(ms, hours) {
   return ms - hours * 60 * 60 * 1000;
@@ -138,21 +156,17 @@ let windChart;
 let lastAvgValue;
 let lastMaxValue;
 function updateWindGraph(data) {
-
-    let avgs = data?.avgs ?? [];
-    let maxs = data?.maxs ?? [];
+    let avgs = data?.winds ?? [];
     // let dirs = {{ data["dirs"] | tojson }}; // ignored for now
 
     // Convert to Chart.js point format {x: Date, y: Number}
     const avgPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
-    const maxPoints = maxs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
+    //const maxPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
 
     // { method: 'ema', halfLifeMinutes: 8 } method: 'gaussian', bandwidthMinutes: 0.2
     const avgSmooth = smoothPoints(avgPoints, { method: 'gaussian', bandwidthMinutes: 0.8 });
-    const maxSmooth = smoothPoints(maxPoints, { method: 'gaussian', bandwidthMinutes: 0.2 });
-
     const avgGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'mean' });
-    const maxGrid = bucketAggregate(maxPoints, { minutes: 15, mode: 'max' });
+    const maxGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'max' });
 
     //const avgSmooth = smoothPoints(avgPoints, { method: 'moving', windowMinutes: 1 });
     //const maxSmooth = smoothPoints(maxPoints, { method: 'moving', windowMinutes: 1 });
@@ -196,6 +210,16 @@ function updateWindGraph(data) {
     //minX = avgPoints[avgPoints.length-1].x
     //let maxX = avgPoints[0].x
     //let minX = subtractHours(maxX, 3);
+
+  if (windChart) {
+    // Replace datasets’ data with new values
+    windChart.data.datasets[0].data = avgGrid;
+    windChart.data.datasets[1].data = maxGrid;
+    windChart.data.datasets[2].data = avgPoints;
+
+    // Tell Chart.js to re-render with new data
+    windChart.update();
+  } else {
     windChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -230,18 +254,7 @@ function updateWindGraph(data) {
                 hidden: true,
                 borderColor: "#36a2ebFF", 
                 backgroundColor: "#94cffa",
-            },
-            {
-                label: "all max",
-                data: maxPoints,
-                borderWidth: 0,
-                avgGrid: 0,
-                tension: 0,
-                pointRadius: 2,
-                hidden: true,
-                borderColor: "#ff638440", 
-                backgroundColor: "#ffb1c1AA",
-            },
+            }
         ]
         },
         options: {
@@ -277,6 +290,10 @@ function updateWindGraph(data) {
         },
         //plugins: [midnightLinesPlugin]
     });
+
+  }
+
+   
 }
 
 let dirChart;
@@ -285,7 +302,7 @@ function updateDirectionGraph(data) {
     let dir = data?.dirs ?? [];
 
     const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
-    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.angle }));
+    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.floor((d.value + 22.5) / 45) % 8 }));
     //const dirPoints2 = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.round(d.value/360*8) }));
 
     const dirGrid = bucketAggregate(dirPoints, { minutes: 15, mode: 'mode' });
@@ -307,89 +324,95 @@ function updateDirectionGraph(data) {
     const lastDirValue = dirGrid[dirGrid.length-1].y;
     $("#wind-dir-value").text(dirFullNames[lastDirValue]);
 
-    dirChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-        datasets: [
-          {
-              label: "smer",
-              data: dirGrid,
-              borderWidth: 2,
-              borderColor: "#4cc0c0", 
-              backgroundColor: "#a5dfdf",
+    if(dirChart) {
+      dirChart.data.datasets[0].data = dirGrid;
+      dirChart.data.datasets[1].data = dirPointsRaw;
+      windChart.update();
+    } else {
+      dirChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+          datasets: [
+            {
+                label: "smer",
+                data: dirGrid,
+                borderWidth: 2,
+                borderColor: "#4cc0c0", 
+                backgroundColor: "#a5dfdf",
+            },
+            {
+                label: "smer2",
+                type: "scatter",
+                data: dirPointsRaw,
+                borderWidth: 1,
+                pointRadius: 3,
+                borderColor: "#4cc0c0", 
+                backgroundColor: "#a5dfdf",
+                hidden: true,
+            },
+          ]
           },
-          {
-              label: "smer2",
-              type: "scatter",
-              data: dirPointsRaw,
-              borderWidth: 1,
-              pointRadius: 3,
-              borderColor: "#4cc0c0", 
-              backgroundColor: "#a5dfdf",
-              hidden: true,
-          },
-        ]
-        },
-        options: {
-          plugins: {
-              legend: {
-                  position: 'bottom',        
-                  align: 'center',
-                  labels: { usePointStyle: true, padding: 12 }
-              },
-              datalabels: {
-                anchor: 'end',        // position at end (top)
-                align: 'top',         // align label above bar
-                color: '#333',
-                font: {
-                  weight: 'bold',
-                  size: 10
+          options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',        
+                    align: 'center',
+                    labels: { usePointStyle: true, padding: 12 }
                 },
-                formatter: function(value, context) {
-                  if (context.datasetIndex != 0) return ""; // dont display the label for scatter plot points
-                  return directions[value.y]
-                }
-              },
-              legend: {
-                display: false
-              }
-          },
-          responsive: true,
-          maintainAspectRatio: false,
-          parsing: false,           // we already provide {x,y}
-          normalized: true,         // better perf for time scale
-          scales: {
-              x: {
-                type: 'time',
-                offset: false,
-                time: { displayFormats: { minute: 'HH:mm' } },
-                grid: { offset: false },
-                ticks: {
-                  callback: (val) => {
-                    const d = new Date(val);
-                    // only show labels every full hour
-                    if (d.getMinutes() % 60 !== 0) return null;
-                    return d.toLocaleTimeString([], { hour: '2-digit',minute: '2-digit',hour12: false });
+                datalabels: {
+                  anchor: 'end',        // position at end (top)
+                  align: 'top',         // align label above bar
+                  color: '#333',
+                  font: {
+                    weight: 'bold',
+                    size: 10
+                  },
+                  formatter: function(value, context) {
+                    if (context.datasetIndex != 0) return ""; // dont display the label for scatter plot points
+                    return directions[value.y]
                   }
                 },
-                min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
-                max: Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2,
-              },
-              y: {
-                  beginAtZero: true,
-                  position: 'left',
-                  max: 8,
+                legend: {
+                  display: false
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: false,           // we already provide {x,y}
+            normalized: true,         // better perf for time scale
+            scales: {
+                x: {
+                  type: 'time',
+                  offset: false,
+                  time: { displayFormats: { minute: 'HH:mm' } },
+                  grid: { offset: false },
                   ticks: {
-                    stepSize: 1,
-                    callback: (value) => {
-                      return directions[value] || value
+                    callback: (val) => {
+                      const d = new Date(val);
+                      // only show labels every full hour
+                      if (d.getMinutes() % 60 !== 0) return null;
+                      return d.toLocaleTimeString([], { hour: '2-digit',minute: '2-digit',hour12: false });
                     }
                   },
-              },
-          }
-        },
-        plugins: [ChartDataLabels]
-    });
+                  min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
+                  max: Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2,
+                },
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    max: 8,
+                    ticks: {
+                      stepSize: 1,
+                      callback: (value) => {
+                        return directions[value] || value
+                      }
+                    },
+                },
+            }
+          },
+          plugins: [ChartDataLabels]
+      });
+  }
 }
 
 function updateDirectionGraph2(data) {

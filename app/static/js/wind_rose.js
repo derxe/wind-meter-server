@@ -391,7 +391,7 @@ function renderWindRose(data) {
   initRoseParams();
 
 
-  result = combineAndInterpolate( data["dirs"], data["avgs"]);
+  result = combineAndInterpolate( data["dirs"], data["winds"]);
   console.log(result);
   console.log("Accessing samples");
 

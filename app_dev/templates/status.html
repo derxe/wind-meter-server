@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Status</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <style>
+    body { font-family: sans-serif; padding: 2em; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Device status 2</h1>
+
+  <a href="/efiG1YOenDEmsN6/wind">Wind Speed</a>
+
+  <label for="duration">Select duration:</label>
+  <select id="duration" name="duration" onchange="durationChanged()">
+    <option value="1">1 hour</option>
+    <option value="6">6 hours</option>
+    <option value="12">12 hours</option>
+    <option value="24">1 day</option>
+    <option value="48">2 days</option>
+    <option value="72">3 days</option>
+    <option value="96">4 days</option>
+    <option value="120">5 days</option>
+    <option value="168">7 days</option>
+    <option value="360">15 days</option>
+    <option value="720">30 days</option>
+  </select>
+  <br>
+  <label for="field-select">Select field:</label>
+  <select id="field-select">
+    <option value="vbatIde">vbatIde</option>
+    <option value="vbatGprs">vbatGprs</option>
+    <option value="vsol">vsol</option>
+    <option value="dur">dur</option>
+    <option value="signal">signal</option>
+    <option value="regDur">regDur</option>
+    <option value="gprsRegDur">gprsRegDur</option>
+  </select>
+
+  <label for="field-select2">Select field 2:</label>
+  <select id="field-select2">
+    <option value="">none</option>
+    <option value="vbatIde">vbatIde</option>
+    <option value="vbatGprs">vbatGprs</option>
+    <option value="vsol">vsol</option>
+    <option value="dur">dur</option>
+    <option value="signal">signal</option>
+    <option value="regDur">regDur</option>
+    <option value="gprsRegDur">gprsRegDur</option>
+  </select>
+
+  <canvas id="myChart" height="200"></canvas>
+
+  <script>
+    // Read query string
+    const params = new URLSearchParams(window.location.search);
+    console.log("Params:", params);
+    const selectedDuration = params.get("duration");
+    if (selectedDuration) {
+      document.getElementById("duration").value = selectedDuration;
+    }
+
+    const field1 = params.get("field1");
+    if (field1) {
+      document.getElementById("field-select").value = field1;
+    }
+
+    const field2 = params.get("field2");
+    if (field2) {
+      document.getElementById("field-select2").value = field2;
+    }
+
+    const data = {{ data | tojson }};
+    const ctx = document.getElementById('myChart').getContext('2d');
+
+    const timestamps = data.map(d => new Date(d.timestamp));
+    const fields = Object.keys(data[0]).filter(k => k !== "timestamp");
+
+    const midnightLinesPlugin = {
+        id: 'midnightLines',
+        afterDraw: (chart) => {
+            const {ctx, scales: {x}} = chart;
+
+            const startDate = new Date(chart.data.labels[chart.data.labels.length - 1]);
+            const endDate = new Date(chart.data.labels[0]); 
+            startDate.setHours(0, 0, 0, 0);
+            for(let timestamp = startDate; timestamp <= endDate; timestamp.setDate(timestamp.getDate() + 1)) {
+              const xPos = x.getPixelForValue(timestamp);
+              ctx.save();
+              ctx.strokeStyle = '#888';
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.moveTo(xPos, chart.chartArea.top);
+              ctx.lineTo(xPos, chart.chartArea.bottom);
+              ctx.stroke();
+              ctx.restore();
+            }
+        }
+    };
+    let chart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        labels: timestamps,
+        datasets: []
+      },
+      options: {
+        responsive: true,
+        scales: {
+            x: {
+            type: 'time',
+            time: {
+                unit: 'hour',
+                displayFormats: {
+                hour: 'HH'
+                }
+            },
+            ticks: {
+                autoSkip: true,
+                maxTicksLimit: 24
+            },
+          },
+          y: {
+            beginAtZero: false,
+            position: 'left',
+          },
+          y2: {
+            beginAtZero: false,
+            position: 'right',
+            grid: {
+              drawOnChartArea: false // don’t duplicate grid lines
+            }
+          }
+        }
+      },
+      plugins: [midnightLinesPlugin]
+    });
+
+    function setQueryParams(field1, field2) {
+      const url = new URL(window.location);
+      const params = url.searchParams;
+
+      params.set("field1", field1);
+      params.set("field2", field2);
+
+      // Update the URL without reloading the page
+      history.replaceState(null, "", `${url.pathname}?${params.toString()}`);
+    }
+
+    function refreshGraph() {
+      const field1 = document.getElementById("field-select").value;
+      const field2 = document.getElementById("field-select2").value;
+
+      setQueryParams(field1, field2);
+
+      chart.data.datasets = [
+        {
+          label: field1,
+          data: data.map(d => d[field1]),
+          yAxisID: 'y',
+          borderColor: '#36a2eb',
+          backgroundColor: '#9ad0f5',
+          borderWidth: 2
+        }
+      ];
+
+      if (field2 && field2 !== "") {
+        chart.data.datasets.push({
+          label: field2,
+          data: data.map(d => d[field2]),
+          yAxisID: 'y2',
+          borderColor: 'red',
+          backgroundColor: 'red',
+          borderWidth: 2
+        });
+      }
+
+      // Set custom Y axis range if field1 starts with "vbat"
+      setScale(field1, 'y');
+      setScale(field2, 'y2');
+
+
+      chart.update();
+    }
+
+    function setScale(fieldName, scaleId) {
+      if (fieldName.startsWith("vbat")) {
+        chart.options.scales[scaleId].min = 3;
+        chart.options.scales[scaleId].max = 4.2;
+      } else if (fieldName === "vsol") {
+        chart.options.scales[scaleId].min = 0;
+        chart.options.scales[scaleId].max = 25;
+      } else {
+        chart.options.scales[scaleId].min = undefined;
+        chart.options.scales[scaleId].max = undefined;
+      }
+
+    }
+
+    refreshGraph(); // first refresh to show the data on first
+    document.getElementById("field-select2").addEventListener("change", refreshGraph);
+    document.getElementById("field-select").addEventListener("change", refreshGraph); 
+
+    function durationChanged() {
+      // update the page when the duration changes
+      const url = new URL(window.location);
+      const params = url.searchParams;
+
+      params.set("field1", document.getElementById("field-select").value);
+      params.set("field2", document.getElementById("field-select2").value);
+      params.set("duration", document.getElementById("duration").value);
+
+      window.location.href = `${url.pathname}?${params.toString()}`;
+    }
+  </script>
+</body>
+</html>

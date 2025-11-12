@@ -9,4 +9,3 @@ lib*
 letsencrypt
 app_dev/__pycache__/*
 app_dev/myenv/*
-app_dev/*

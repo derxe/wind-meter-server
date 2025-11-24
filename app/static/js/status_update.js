@@ -1,5 +1,6 @@
 console.log("status_update.js loaded");
 
+
 $(function() {
     getStatus();
 });
@@ -59,45 +60,46 @@ function isDeviceSleeping() {
   const now = new Date();
   const hour = now.getHours();
   // Sleeping between 20:00 and 06:00 
-  return (hour >= 20 || hour < 6);
+  return (hour >= 19 || hour < 6);
 }
 
 function updateStatusPannel(data) {
-  const timeSinceLastSend = timeSinceMinutes(data["timestamp"]);
+  let timeSinceLastSend = timeSinceMinutes(data["timestamp"]);
+  timeSinceLastSend = 1;
   const timeSinceStr = timeSince(data["timestamp"]);
   const time = formattedTime(data["timestamp"]);
 
   let bubleText = "--";
   let titleText = "--";
   let detailsText = "";
-  let statusClass = "offline"
+  let statusClass = "status-offline"
   if(timeSinceLastSend < 22) {
     bubleText = "vse ok"
     titleText = "Deluje"
-    statusClass = "ok"
-  } else if(timeSinceLastSend >= 22) {
-    bubleText = "zastareli podatki"
-    titleText = "Naprava se ne odziva 🤔"
-    statusClass = "non-responsive"
+    statusClass = "status-ok"
   } else if(timeSinceLastSend >= 200) {
     bubleText = "neodzivna!"
     titleText = "Napaka"
-    statusClass = "error"
+    statusClass = "status-error"
+  } else if(timeSinceLastSend >= 22) {
+    bubleText = "zastareli podatki"
+    titleText = "Ni odziva 🤔"
+    statusClass = "status-non-responsive"
   }
 
   if(isDeviceSleeping()) {
     bubleText = "Zzzz Zzzzz..."
-    titleText = "Naprava počiva 😴 😴"
-    detailsText = `Naprava ne pošilja podatkov zvečer med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
-    statusClass = "sleeping"
+    titleText = "Naprava počiva 😴"
+    detailsText = `Naprava ne pošilja podatkov med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
+    statusClass = "status-sleeping"
   }
 
   toggleOverlay("sleeping", isDeviceSleeping());
 
   detailsText += `Postaja zadnjič poslala podatke: <b>${time}</b>, pred <b>${timeSinceStr}</b>`;
 
-  $(".status-card")
-    .removeClass("ok offline sleeping error non-responsive")
+  $("#header")
+    .removeClass("status-ok status-offline status-sleeping status-error status-non-responsive")
     .addClass(statusClass);
 
   $("#status-bubble-text").text(bubleText);
@@ -118,8 +120,7 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("Trajanje registracije:", (data["regDur"]??"--") + "s");
   displayStatusInfo("Trajanje GPRS registracije:", (data["gprsRegDur"]??"--") + "s");
   displayStatusInfo("Trajanje skupaj:", (data["dur"]??"--") + "s");
-  displayStatusInfo("FW version:", "??");
-  displayStatusInfo("Uptime:", "??");
+  displayStatusInfo("FW version:", data["ver"]);
 
   const battProc = batteryVoltageToProcentage(data["vbatIde"]);
   const battBarColor = batteryColorHex(battProc);

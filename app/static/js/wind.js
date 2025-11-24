@@ -2,13 +2,14 @@ console.log("wind.js v2 loaded");
 
 let unit="ms"
 let displayDuration;
+let avgPoints;
 $(function() {
     displayDuration = $('#select-display-duration').val();
     console.log("Display duration:", displayDuration);
     $('#select-display-duration').on('change', function () {
       displayDuration = parseInt($(this).val(), 10);
       console.log("Display duration:", displayDuration);
-      getWindData();
+      loadWindData();
     });
     getWindData();
 
@@ -16,42 +17,133 @@ $(function() {
       unit = selectedValue;
       console.log("Selected a new speed unit:", unit);
     
+      changeUnitsBarGraphLegend(unit);
       updateGraphUnit();
       updateMaxAvgUnit();
     })
 
-    onToggleButtons("toggle-buttons-detail", (selectedValue) => {
-      console.log("Selected:", selectedValue);
-
-      if(selectedValue == "detailed") {
-        unhideDatasetsKeepScale(windChart, [2], [0, 1]);
-        unhideDatasetsKeepScale(dirChart, [1], [0]);
-      } else {
-        unhideDatasetsKeepScale(windChart, [0, 1], [2]);
-        unhideDatasetsKeepScale(dirChart, [0], [1]);
-      }
-      windChart.update();
-    })
+    $("#double-click-show-detailed").on("dblclick", function() {
+        toggleDetailedDisplay();
+    });
 });
 
-function getWindData() {
-  $('#loading-msg').show();
-  $('#wind-chart').hide();
-  $('#dir-chart').hide();
-  $('.data-loading').removeClass('hidden').attr('aria-busy', 'true');
-  $.getJSON(`data/wind.json?duration=${displayDuration}`, function(data) {
-      $('#loading-msg').hide();
-      $('#wind-chart').show();
-      $('#dir-chart').show();
-      $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
 
-      console.log('Wind data loaded:', data);
-      updateWindGraph(data);
-      updateDirectionGraph(data);
+let detailedShown = false;
+function toggleDetailedDisplay() {
+  console.log("Wind speed title dbl clicked: detailedShown:", detailedShown, "all_wind_data len:", all_wind_data.winds.length);
+  if(!all_wind_data) return; // all_wind_data hasnt be loaded yet
+  if(!detailedShown) {
+    if(!windChart.data.datasets[2]) {
+      // only add NEW dataset if avgPOints are not set yet 
+      avgPoints = all_wind_data.winds.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value}));
+      const newDataset = {
+          label: "all",
+          data: avgPoints,
+          borderWidth: 0,
+          avgGrid: 0,
+          tension: 0,
+          pointRadius: 3,
+          borderColor: "#36a2ebFF",
+          backgroundColor: "#94cffa"
+      };
+      windChart.data.datasets[2] = newDataset;
+    } else {
+      windChart.data.datasets[2].hidden = false;
+    }
 
-      renderWindRose(data);
-      //updateDirectionGraph2(data);
+    if(!dirChart.data.datasets[1]) { 
+      // only add NEW dataset if avgPOints are not set yet 
+      dirPoints = all_wind_data.dirs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
+      const newDataset = {
+          label: "smer2",
+          type: "scatter",
+          data: dirPoints,
+          borderWidth: 1,
+          pointRadius: 3,
+          borderColor: "#4cc0c0", 
+          backgroundColor: "#a5dfdf",
+          order: 1,
+          hidden: false,
+      };
+      dirChart.data.datasets[1] = newDataset;
+    } else {
+      dirChart.data.datasets[1].hidden = false;
+    }
+
+  } else {
+    if(windChart.data.datasets[2]) {
+      windChart.data.datasets[2].hidden = true;
+    }
+
+    if(dirChart.data.datasets[1]) {
+      dirChart.data.datasets[1].hidden = true;
+    }
+  }
+
+  windChart.update();
+  dirChart.update();
+  detailedShown = !detailedShown;
+}
+
+
+function onToggleButtons(id, listener) {
+  const $buttons = $(`#${id} button`);
+  let selectedValue = "ms"; // default
+
+  $buttons.on("click", function() {
+    const prevSelectedValue = selectedValue;
+    selectedValue = $(this).val();
+
+    $buttons
+      .removeClass("bg-slate-900 text-white")
+      .addClass("bg-white text-slate-600 hover:bg-slate-100");
+
+    $(this)
+      .removeClass("bg-white text-slate-600 hover:bg-slate-100")
+      .addClass("bg-slate-900 text-white");
+
+    if(prevSelectedValue != selectedValue)
+      listener(selectedValue);
   });
+
+}
+function showLoading(isLoading) {
+  if(isLoading) {
+    $('#loading-msg').show();
+    $('#wind-chart').hide();
+    $('#dir-chart').hide();
+    $('.data-loading').removeClass('hidden').attr('aria-busy', 'true');
+  } else {
+    $('#loading-msg').hide();
+    $('#wind-chart').show();
+    $('#dir-chart').show();
+    $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
+  }
+}
+
+function loadWindData() {
+    showLoading(true);
+    $.getJSON(`data/wind.json?duration=${displayDuration}`, function(data) {
+        showLoading(false);
+
+        console.log('Wind data loaded:', data);
+        updateWindGraph(data);
+        updateDirectionGraph(data);
+    });
+}
+
+function getWindData() {
+  if(preloadedWindData) {
+    showLoading(false);
+    data = preloadedWindData;
+    updateWindGraph(data);
+    updateDirectionGraph(data);
+
+  } else {
+    loadWindData();
+  }
+
+
 }
 
 function updateMaxAvgUnit() {
@@ -97,55 +189,7 @@ function updateGraphUnit() {
   windChart.update();
 }
 
-function unhideDatasetsKeepScale(chart, indicesShow, indicesHide) {
-  // 1. Capture current scale limits
-  const xScale = chart.scales.x;
-  const yScale = chart.scales.y;
-  const xMin = xScale.min;
-  const xMax = xScale.max;
-  const yMin = yScale.min;
-  const yMax = yScale.max;
 
-  // 2. Unhide selected datasets
-  indicesShow.forEach(i => {
-    chart.data.datasets[Math.abs(i)].hidden = false;
-  });
-
-  indicesHide.forEach(i => {
-    chart.data.datasets[Math.abs(i)].hidden = true;
-  });
-
-  // 3. Lock scales
-  chart.options.scales.x.min = xMin;
-  chart.options.scales.x.max = xMax;
-  chart.options.scales.y.min = yMin;
-  chart.options.scales.y.max = yMax;
-
-  // 4. Update chart
-  chart.update('none');
-}
-
-function onToggleButtons(id, listener) {
-  const $buttons = $(`#${id} button`);
-  let selectedValue = "ms"; // default
-
-  $buttons.on("click", function() {
-    const prevSelectedValue = selectedValue;
-    selectedValue = $(this).val();
-
-    $buttons
-      .removeClass("bg-slate-900 text-white")
-      .addClass("bg-white text-slate-600 hover:bg-slate-100");
-
-    $(this)
-      .removeClass("bg-white text-slate-600 hover:bg-slate-100")
-      .addClass("bg-slate-900 text-white");
-
-    if(prevSelectedValue != selectedValue)
-      listener(selectedValue);
-  });
-
-}
 
 
 function subtractHours(ms, hours) {
@@ -156,70 +200,30 @@ let windChart;
 let lastAvgValue;
 let lastMaxValue;
 function updateWindGraph(data) {
-    let avgs = data?.winds ?? [];
-    // let dirs = {{ data["dirs"] | tojson }}; // ignored for now
+  data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const avgGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.avg}));
+  const maxGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.max}));
 
-    // Convert to Chart.js point format {x: Date, y: Number}
-    const avgPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value}));
-    //const maxPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
+  const ctx = document.getElementById('wind-chart').getContext('2d');
 
-    // { method: 'ema', halfLifeMinutes: 8 } method: 'gaussian', bandwidthMinutes: 0.2
-    const avgSmooth = smoothPoints(avgPoints, { method: 'gaussian', bandwidthMinutes: 0.8 });
-    const avgGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'mean' });
-    const maxGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'max' });
+  lastAvgValue = avgGrid[avgGrid.length-1].y;
+  lastMaxValue = maxGrid[maxGrid.length-1].y;
+  updateMaxAvgUnit();
 
-    //const avgSmooth = smoothPoints(avgPoints, { method: 'moving', windowMinutes: 1 });
-    //const maxSmooth = smoothPoints(maxPoints, { method: 'moving', windowMinutes: 1 });
+  function getDurationHours(dataGrid) {
+    if (!dataGrid || dataGrid.length < 2) return 0;
 
-    const ctx = document.getElementById('wind-chart').getContext('2d');
+    const startX = dataGrid[0].x;
+    const endX   = dataGrid[dataGrid.length - 1].x;
 
-    lastAvgValue = avgGrid[avgGrid.length-1].y;
-    lastMaxValue = maxGrid[maxGrid.length-1].y;
-    updateMaxAvgUnit();
+    return (endX - startX) / 3600000;   // ms → hours
+  }
 
-    // Vertical lines at local midnights across the visible x-range
-    const midnightLinesPlugin = {
-        id: 'midnightLines',
-        afterDraw: (chart) => {
-        const { ctx, scales: { x }, chartArea } = chart;
-        if (!x || x.min == null || x.max == null) return;
+  const dataDuration = getDurationHours(avgGrid);
+  
+  console.log("avgGrid", avgGrid)
 
-        // Start from first midnight >= x.min
-        const first = new Date(x.min);
-        first.setHours(0,0,0,0);
-        if (first.getTime() < x.min) first.setDate(first.getDate() + 1);
-
-        for (let t = new Date(first); t.getTime() <= x.max; t.setDate(t.getDate() + 1)) {
-            const xPos = x.getPixelForValue(t);
-            if (xPos >= chartArea.left && xPos <= chartArea.right) {
-            ctx.save();
-            ctx.strokeStyle = '#888';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(xPos, chartArea.top);
-            ctx.lineTo(xPos, chartArea.bottom);
-            ctx.stroke();
-            ctx.restore();
-            }
-        }
-        }
-    };
-    
-    console.log("avgGrid", avgGrid)
-
-    //minX = avgPoints[avgPoints.length-1].x
-    //let maxX = avgPoints[0].x
-    //let minX = subtractHours(maxX, 3);
-
-  if (windChart) {
-    // Replace datasets’ data with new values
-    windChart.data.datasets[0].data = avgGrid;
-    windChart.data.datasets[1].data = maxGrid;
-    windChart.data.datasets[2].data = avgPoints;
-
-    // Tell Chart.js to re-render with new data
-    windChart.update();
-  } else {
+  if (!windChart) {
     windChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -230,21 +234,23 @@ function updateWindGraph(data) {
                 data: avgGrid,
                 borderWidth: 2,
                 avgGrid: 0,
-                tension: 0.3,
+                tension: 0.4,
                 pointRadius: 2,
                 borderColor: "#36a2eb", 
                 backgroundColor: "#9ad0f5",
+                spanGaps: 1*60*60*1000, // dont draw the line if the data is more then 1 hour appart
             },
             {
                 label: "maksimalna",
                 data: maxGrid,
                 borderWidth: 2,
-                tension: 0.3,
+                tension: 0.4,
                 pointRadius: 2,
                 borderColor: "#ff6384", 
                 backgroundColor: "#ffb1c1",
+                spanGaps: 1*60*60*1000,  // dont draw the line if the data is more then 1 hour appart
             },
-            {
+            /*{
                 label: "all",
                 data: avgPoints,
                 borderWidth: 0,
@@ -254,81 +260,78 @@ function updateWindGraph(data) {
                 hidden: true,
                 borderColor: "#36a2ebFF", 
                 backgroundColor: "#94cffa",
-            }
+            }*/
         ]
         },
         options: {
-            plugins: {
-                legend: {
-                    display: false,
-                    position: 'bottom',      
-                    align: 'center',
-                    labels: { usePointStyle: true, padding: 12 }
-                }
-            },
-            responsive: true,
-            maintainAspectRatio: false,
-            parsing: false,           // we already provide {x,y}
-            normalized: true,         // better perf for time scale
-            scales: {
-                x: {
-                  type: 'time',
-                  time: { displayFormats: { minute: 'HH:mm' } },
-                  ticks: {
-                    callback: (val) => {
-                      const d = new Date(val);
-                      if(d.getMinutes() % 60 != 0) return null; // display only timestamps each 30 minutes 
-                      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-                    },
+          animation: {
+              duration: 0
+          },
+          plugins: {
+              legend: {
+                  display: false,
+                  position: 'bottom',      
+                  align: 'center',
+                  labels: { usePointStyle: true, padding: 12 }
+              }
+          },
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,           // we already provide {x,y}
+          normalized: true,         // better perf for time scale
+          scales: {
+              x: {
+                type: 'time',
+                time: { 
+                  displayFormats: { minute: 'HH:mm' },
+                },
+                ticks: {
+                  callback: (val) => {
+                    const d = new Date(val);
+                    if(d.getMinutes() % 60 != 0) return null; // display only timestamps each 30 minutes 
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                   },
                 },
-                y: {
-                    beginAtZero: true,
-                    position: 'left',
-                },
-            }
+              },
+              y: {
+                  beginAtZero: true,
+                  position: 'left',
+              },
+          }
         },
         //plugins: [midnightLinesPlugin]
     });
-
   }
 
-   
+  windChart.data.datasets[0].data = avgGrid;
+  windChart.data.datasets[1].data = maxGrid;
+
+  // dont show line if there is too much data
+  let showLine = dataDuration < 5*(24) 
+  windChart.data.datasets[0].showLine = showLine;  
+  windChart.data.datasets[1].showLine = showLine; 
+
+
+  windChart.update();   
 }
 
 let dirChart;
 function updateDirectionGraph(data) {
+    // const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
 
-    let dir = data?.dirs ?? [];
-
-    const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
-    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.floor((d.value + 22.5) / 45) % 8 }));
-    //const dirPoints2 = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.round(d.value/360*8) }));
-
-    const dirGrid = bucketAggregate(dirPoints, { minutes: 15, mode: 'mode' });
-    //const dirGrid2 = bucketAggregate(dirPoints, { minutes: 1, mode: 'last' });
-
-    
-    //const dirGrid2 = dirGrid.map(d => ({ x: d.x, y: d.y + 1 }));
-
+    const dirGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.dir }));
     const ctx = document.getElementById('dir-chart').getContext('2d');
+    
     //const directions = ["↑", "↖", "←", "↙", "↓", "↘", "→", "↗"];
     const directions = ["S", "SV", "V", "JV", "J", "JZ", "Z", "SZ", "S"];
     const dirFullNames = ["Sever", "SeveroVzhod", "Vzhod", "JugoVzhod", "Jug", "JugoZahod", "Zahod", "SeveroZahod", " "];
-    //const directions = ["S", "SZ", "Z", "JZ", "J", "JV", "V", "SV", " "];
-    //minX = avgPoints[avgPoints.length-1].x
-    //let maxX = avgPoints[0].x
-    //let minX = subtractHours(maxX, 3);
+    
     const barWidthMs = 15 * 60 * 1000; // for x-minute spacing
 
     const lastDirValue = dirGrid[dirGrid.length-1].y;
     $("#wind-dir-value").text(dirFullNames[lastDirValue]);
 
-    if(dirChart) {
-      dirChart.data.datasets[0].data = dirGrid;
-      dirChart.data.datasets[1].data = dirPointsRaw;
-      dirChart.update();
-    } else {
+    if(!dirChart) {
       dirChart = new Chart(ctx, {
           type: 'bar',
           data: {
@@ -339,8 +342,9 @@ function updateDirectionGraph(data) {
                 borderWidth: 2,
                 borderColor: "#4cc0c0", 
                 backgroundColor: "#a5dfdf",
+                order: 2,
             },
-            {
+            /*{
                 label: "smer2",
                 type: "scatter",
                 data: dirPointsRaw,
@@ -349,10 +353,13 @@ function updateDirectionGraph(data) {
                 borderColor: "#4cc0c0", 
                 backgroundColor: "#a5dfdf",
                 hidden: true,
-            },
+            },*/
           ]
           },
           options: {
+            animation: {
+              duration: 0
+            },
             plugins: {
                 legend: {
                     position: 'bottom',        
@@ -413,90 +420,14 @@ function updateDirectionGraph(data) {
           plugins: [ChartDataLabels]
       });
   }
+
+  dirChart.data.datasets[0].data = dirGrid;
+  dirChart.options.scales.x.min = Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2;
+  dirChart.options.scales.x.max = Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2;
+
+  //dirChart.data.datasets[1].data = dirPointsRaw;
+  dirChart.update();
 }
-
-function updateDirectionGraph2(data) {
-
-    let dir = data?.dirs ?? [];
-
-    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
-
-    const ctx = document.getElementById('dir-chart2').getContext('2d');
-
-    //minX = avgPoints[avgPoints.length-1].x
-    //let maxX = avgPoints[0].x
-    //let minX = subtractHours(maxX, 3);
-    const chart = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-        // no labels; each dataset has x/y
-        datasets: [
-         /* {
-              label: "smer",
-              data: dirGrid,
-              borderWidth: 2,
-          },*/
-          {
-              label: "smer",
-              data: dirPoints,
-              borderWidth: 2,
-          },
-
-        ]
-        },
-        options: {
-          plugins: {
-              legend: {
-                  position: 'bottom',        
-                  align: 'center',
-                  labels: { usePointStyle: true, padding: 12 }
-              },
-              datalabels: {
-                anchor: 'end',        // position at end (top)
-                align: 'top',         // align label above bar
-                color: '#333',
-                font: {
-                  weight: 'bold'
-                },
-                formatter: function(value, context) {
-                  return value.y
-                }
-              },
-              legend: {
-                display: false
-              }
-          },
-          responsive: true,
-          parsing: false,           // we already provide {x,y}
-          normalized: true,         // better perf for time scale
-          scales: {
-              x: {
-                  //min: minX,
-                  //max: maxX,
-                  type: 'timeseries',
-                  time: {
-                      unit: 'minute',
-                      displayFormats: {
-                      minute: 'HH:mm'   
-                      },
-                      tooltipFormat: 'HH:mm:ss' 
-                  },
-                  ticks: {
-                      autoSkip: true,
-                      maxTicksLimit: 24
-                  }
-              },
-              y: {
-                  beginAtZero: true,
-                  position: 'left',
-                  max: 8,
-              },
-          }
-        },
-        //plugins: [ChartDataLabels]
-    });
-}
-
 
 
 function refreshGraph() {

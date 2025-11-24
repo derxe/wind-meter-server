@@ -35,6 +35,8 @@ def save_status_update(timestamp, data):
         return
 
     data["timestamp"] = timestamp
+
+    
     
     index = db.statuses.insert_one(data)
 
@@ -236,6 +238,31 @@ def get_vbat():
     ])
     return result_str
 
+
+def get_status_values(data_key_name, duration_hours=6):
+    logging.info("Fetching vbat data from database")
+    logging.info(f"n docs {db.statuses.count_documents({})}")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+
+    exists = db.statuses.find_one({ data_key_name: { "$exists": True } })
+    if not exists:
+        return {
+            "error", "Status data with key: '" + data_key_name + "' doesnt exist."
+        }
+
+    cursor = db.statuses.find(
+        {"timestamp": {"$gte": start_time}}, {"_id": 0, "timestamp": 1, data_key_name: 1}
+    ).sort("timestamp", -1)
+
+    status_values = []
+    for doc in cursor:
+        status_values.append({
+            "value": doc[data_key_name],
+            "timestamp": doc["timestamp"]
+        })
+
+    return status_values
+
 def get_last_status():
     cursor = db.statuses.find(
         {},
@@ -252,6 +279,22 @@ def get_last_status():
         return None
 
     return data
+
+
+def get_last_statuses(n=1, shift=0):
+    cursor = (
+        db.statuses.find({}, {"_id": 0})
+        .sort("timestamp", -1)
+        .skip(shift)
+        .limit(n)
+    )
+
+    results = list(cursor)
+
+    for item in results:
+        item["timestamp"] = item["timestamp"].astimezone(TZ).isoformat()
+
+    return results
 
 def get_status_updates(duration_hours=None, fromToday=False):
     logging.info("Fetching status updates from database")
@@ -284,12 +327,13 @@ def get_status_updates(duration_hours=None, fromToday=False):
 
     return data
 
-def get_wind(duration_hours=6):
-    logging.info(f"Fetching wind data from the last {duration_hours} hours")
-    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
-    
+def get_wind(duration_hours: int = 6):
+    duration_shift = 0
+    end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
+    start_time = end_time - timedelta(hours=duration_hours)
+
     cursor = db.winds.find(
-        {"timestamp": {"$gte": start_time}},
+        {"timestamp": {"$gte": start_time, "$lte": end_time}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
@@ -300,6 +344,25 @@ def get_wind(duration_hours=6):
         data.append(doc)
 
     return data
+
+
+def get_directions(duration_hours=6):
+    duration_shift = 0
+    end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
+    start_time = end_time - timedelta(hours=duration_hours)
+
+    cursor = db.dirs.find(
+        {"timestamp": {"$gte": start_time, "$lte": end_time}},
+        {"_id": 0, "timestamp": 1, "value": 1}
+    ).sort("timestamp", -1)
+
+    data = []
+    for doc in cursor:
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
+        data.append(doc)
+
+    return data
+
 
 def get_bucketed_data(duration_hours=6):
     logging.info(f"Fetching bucketed data from the lsat {duration_hours} hours")
@@ -352,22 +415,6 @@ def get_wind_bucketed(duration_hours=6):
 
     return data
 
-
-def get_directions(duration_hours=6):
-    logging.info(f"Fetching directions from the lsat {duration_hours} hours")
-    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
-    
-    cursor = db.dirs.find(
-        {"timestamp": {"$gte": start_time}},
-        {"_id": 0, "timestamp": 1, "value": 1}
-    ).sort("timestamp", -1)
-
-    data = []
-    for doc in cursor:
-        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
-        data.append(doc)
-
-    return data
 
 
 def get_dirs_bucketed(duration_hours=6):
@@ -646,10 +693,10 @@ if __name__ == "__main__":
     #create_average_wind_values()
     #create_average_dir_values()
 
-    cursor = db.dir_bucketed.find({}, {}).sort("timestamp", 1)
+    #cursor = db.dir_bucketed.find({}, {}).sort("timestamp", 1)
 
-    for doc in cursor:
-        print(doc)
+    #for doc in cursor:
+    #    print(doc)
     #for timestamp, value in result:
     #    print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
 

@@ -72,6 +72,49 @@ def save_data():
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
 
 
+@app.route("/save_test/<sender_id>", methods=["GET", "POST"])
+def save_data_test_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got test save request from: {sender_id}. From ip: {ip}")
+
+    if request.method == "GET":
+        data = request.query_string.decode("utf-8")
+    elif request.method == "POST":
+        data = request.get_data(as_text=True)
+    else:
+        return "unknown protocol", 500
+
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("test_" + sender_id, data)
+    #try:
+    #    db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+    #except Exception as e:
+    #    print(f"[ERROR] Failed to save received data: {e}")
+    #    response += "error parsing data"
+
+    #response += f"prefs:\n"
+    #response += f"set_phone_num:069867551\n"
+    #response += f"url_prefs:http://46.224.24.144/veter_dev/save_prefs/\n"
+    #response += f"no_reset:1\n"
+    #response += f"sleep_enabled:1\n"
+    #response += f"sleep_hour_start:23\n"
+    #response += f"sleep_hour_end:1\n"
+    return Response(response, mimetype="text/plain")
+
+@app.route("/save_prefs/<sender_id>", methods=["POST"])
+def save_prefs_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got preferences save request from: {sender_id}. From ip: {ip}")
+
+    data = request.get_data(as_text=True)
+    
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("prefs_" + sender_id, data)
+
+    return Response(response, mimetype="text/plain")
+
 @app.route("/save/<sender_id>", methods=["GET", "POST"])
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
@@ -102,25 +145,26 @@ def save_data_sender_id(sender_id):
     return Response(response, mimetype="text/plain")
 
 
+@app.route("/peter/data/status/<data_key>.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def get_status_values(data_key):
+    duration_hours = float(request.args.get("duration", "6"))
+    return db.get_status_values(data_key, duration_hours=duration_hours)
 
 @app.route("/data/status.json", methods=["GET"])
-def status():
-    data = db.get_last_status()
-    return data
-
-
-@app.route("/data/buckets.json", methods=["GET"])
-#@cache.cached(query_string=True)
-def data_bucketed():
-    duration_hours = float(request.args.get("duration", "6"))
-
-    data = db.get_bucketed_data(duration_hours=duration_hours)
-
-    return data
+def status_shift():
+    shift = int(request.args.get("shift", "0"))
+    return db.get_last_statuses(shift=shift)[0]
 
 @app.route("/data/wind.json", methods=["GET"])
 #@cache.cached(query_string=True)
 def wind_data():
+    duration_hours = float(request.args.get("duration", "6"))
+    return db.get_bucketed_data(duration_hours=duration_hours)
+
+@app.route("/data/wind_all.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def wind_data_all():
     duration_hours = float(request.args.get("duration", "2"))
     data = {
         "winds": db.get_wind(duration_hours=duration_hours),
@@ -134,8 +178,19 @@ def wind_peter():
     data = {
         'title': 'Sv. Peter',
         'statusData': db.get_last_status(),
+        'windData': db.get_bucketed_data(duration_hours=6),
     }
     return render_template("wind.html", **data)
+
+
+@app.route("/peter/info", methods=["GET"])
+def wind_peter_info():
+    data = {
+        'title': 'Sv. Peter',
+        'statusData': db.get_last_status(),
+    }
+    return render_template("info.html", **data)
+
 
 @app.route("/vbats", methods=["GET"])
 def get_vbats():

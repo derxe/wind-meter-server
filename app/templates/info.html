@@ -1,0 +1,144 @@
+{% from '_flask_macros.html' import sleep_overlay, loading_overlay %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, user-scalable=no" />
+  <title>Sv. Peter: veterna postaja</title>
+  <!-- Tailwind via CDN (no app JS) -->
+  <!-- <script src="https://cdn.tailwindcss.com"></script>
+  <script src="static/css/tailwind-3-4-17.min.js"></script> -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="../static/js/info.js"></script>
+</head>
+
+<script>
+  preloadedStatusData =  {{ statusData | tojson }}; 
+</script>
+
+<body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> 
+  <div id="header" class="status-ok">
+    <div class="relative bg-white" >
+    <div class="relative" >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h1 class="text-lg leading-tight">
+            Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
+          </h1>
+        </div>
+      </div>
+
+      </div>
+    </div>
+
+    <div class="relative flex items-center justify-center w-full h-[30px] overflow-hidden">
+      <div class="status-border absolute left-1/2 -translate-x-1/2 w-[96rem] h-full"></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <main class="max-w-[100rem] mx-auto px-1 lg:px-6 pt-3 grid gap-6 lg:grid-cols-3 items-start">
+   
+
+    <!-- Right column: device status + (moved) location/status/notes -->
+    <section class="lg:col-span-1 grid gap-6">
+      <!-- Device Status -->
+      <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
+        <!--{{ sleep_overlay() }}-->
+
+        <h3 id="double-click-show-detailed"  class="font-semibold mb-3 select-none">Parametri postaje</h3> 
+        
+        <div class="inline-flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
+          <button id="status-shift-dec" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"></path>
+            </svg>
+          </button>
+
+          <div class="px-2 h-full text-slate-700 bg-white border-x border-slate-200 text-sm text-center min-w-[2.5rem]">
+            <span id="status-shift-value" class="font-semibold text-sm">0</span><span id="rose-delay-unit" class="text-xs ml-1"></span> 
+          </div>
+
+          <button id="status-shift-inc" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </button>
+        </div>
+
+        <span id="loading-status-msg">Loading status ...</span>
+        
+        <!-- Status Bars -->
+        <div id="status-graphical-info" class="grid grid-cols-2 gap-3"> </div>
+        
+        <!-- Status info text values -->
+        <div id="status-info" class="mt-4 grid gap-1 text-sm"> </div>
+
+      </div>
+    </section>
+
+    <!-- Left column: charts + wind rose (same width) -->
+    <aside class="lg:col-span-2 grid gap-6">
+      <!-- Wind Speed Card -->
+      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <!--{{ sleep_overlay() }}-->
+
+        <div class="p-1 pb-2 flex justify-between gap-4 pr-2">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-base">Graph of:</h2>
+
+             <span id="grap-name" class="text-sm ms-2 "></span>
+
+            <select id="select-display-duration" class="px-3 py-2 ms-4 text-sm rounded-xl border border-slate-200 bg-white">
+                <option value="6">6 ur</option>
+                <option value="12">12 ur</option>
+                <option value="24">24 ur</option>
+                <option value="48" selected>2 dni</option>
+                <option value="96">4 dni</option>
+                <option value="168">7 dni</option>
+                <option value="336">14 dni</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="chart-holder" class="chart-holder relative w-full md:h-[25rem] h-60 ">
+          {{ loading_overlay() }}
+
+          <canvas id="status-chart" class="absolute inset-0 w-full h-full"></canvas>
+       </div>
+      </div>
+
+      
+      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <!--{{ sleep_overlay() }}-->
+
+        <div class="p-1 pb-2 flex justify-between gap-4 pr-2">
+          <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-base">Raw logs:</h2>
+          </div>
+        </div>
+
+        <div id="logs-value" 
+            class="shrink mt-2 w-full max-w-full p-3 rounded-lg bg-slate-100
+                    text-sm font-mono whitespace-pre-wrap break-all">
+          <div class="part of log class"> part of log</div>
+        </div>
+
+      </div>
+
+
+    </aside>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
+    © 2025 Paraglidng Wind Station · Made with ❤️ to 🪂
+  </footer>
+</body>
+</html>

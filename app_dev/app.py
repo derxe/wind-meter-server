@@ -342,7 +342,6 @@ def get_log(log_name):
         log_content = get_n_lines(filepath, n_lines)
         
     return Response(log_content, mimetype="text/plain")
-    return render_template("log.html", log_filenames=log_filenames)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

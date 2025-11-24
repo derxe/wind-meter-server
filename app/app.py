@@ -1,4 +1,5 @@
 from flask import Flask, request, redirect, session, url_for, render_template, Response, jsonify, abort, send_file
+from flask_compress import Compress
 import requests
 import os
 import re
@@ -10,13 +11,15 @@ from werkzeug.exceptions import HTTPException
 import string
 import logging
 from pymongo import MongoClient
-#import db
-import db_v2 as db
+import db
 import json
+from flask_caching import Cache
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 app.secret_key = 'super-secret'
+Compress(app)
+#cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': (60*20)})
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
 
@@ -90,11 +93,12 @@ def save_data_sender_id(sender_id):
         print(f"[ERROR] Failed to save received data: {e}")
         response += "error parsing data"
 
+    #response = f"saved: {len(data)}\n"
     #response += f"prefs:\n"
     #response += f"pref_version:3\n"
     #response += f"sleep_enabled:1\n"
-    #response += f"sleep_hour_start:19\n"
-    #response += f"sleep_hour_end:6\n"
+    #response += f"sleep_hour_start:23\n"
+    #response += f"sleep_hour_end:1\n"
     return Response(response, mimetype="text/plain")
 
 
@@ -102,29 +106,28 @@ def save_data_sender_id(sender_id):
 @app.route("/data/status.json", methods=["GET"])
 def status():
     data = db.get_last_status()
-    return Response(json.dumps(data), mimetype="application/json")
+    return data
+
+
+@app.route("/data/buckets.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def data_bucketed():
+    duration_hours = float(request.args.get("duration", "6"))
+
+    data = db.get_bucketed_data(duration_hours=duration_hours)
+
+    return data
 
 @app.route("/data/wind.json", methods=["GET"])
+#@cache.cached(query_string=True)
 def wind_data():
     duration_hours = float(request.args.get("duration", "2"))
     data = {
         "winds": db.get_wind(duration_hours=duration_hours),
-        "dirs": db.get_directions(duration_hours=duration_hours)
+        "dirs": db.get_directions(duration_hours=duration_hours),
     }
 
-    return Response(json.dumps(data), mimetype="application/json")
-
-@app.route("/wind", methods=["GET"])
-def wind():
-    return render_template("wind.html")
-
-@app.route("/windv2", methods=["GET"])
-def windv2():
-    data = {
-        'title': 'Sv. Peter',
-        'statusData': db.get_last_status(),
-    }
-    return render_template("windv2.html", **data)
+    return data
 
 @app.route("/peter", methods=["GET"])
 def wind_peter():
@@ -132,7 +135,7 @@ def wind_peter():
         'title': 'Sv. Peter',
         'statusData': db.get_last_status(),
     }
-    return render_template("windv2.html", **data)
+    return render_template("wind.html", **data)
 
 @app.route("/vbats", methods=["GET"])
 def get_vbats():
@@ -180,6 +183,36 @@ def directions():
     return Response(strdata, mimetype="text/plain")
 
 
+def get_n_lines_with_errors(file_name, n):
+    """
+    Reads the content of a file and returns only the last 'n' lines.
+    
+    If the file has fewer than 'n' lines, all lines are returned.
+    This is an efficient way to get the end of a file in Python.
+    """
+    try:
+        with open(file_name, "r") as f:
+            # Read all lines into a list
+            all_lines = f.readlines()
+            
+            # Use negative slicing [-n:] to get the last N lines.
+            # We join with "" because readlines() preserves the original newline characters.
+            last_n_lines = []
+            index = 0
+            for i in range(1, len(all_lines)):
+                if "errors=" in all_lines[-i] and "errors=;" in all_lines[-i]:
+                    continue
+                index += 1
+                if index > n:
+                    break
+                last_n_lines.append(str(i) + " err " + all_lines[-i])
+            
+        # Join the list of lines back into a single string
+        return "\n".join(last_n_lines)
+    except Exception as e:
+        return f"ERROR reading file: {e}"
+
+
 def get_n_lines(file_name, n):
     """
     Reads the content of a file and returns only the last 'n' lines.
@@ -196,7 +229,7 @@ def get_n_lines(file_name, n):
             # We join with "" because readlines() preserves the original newline characters.
             last_n_lines = []
             for i in range(1, min(n, len(all_lines))):
-                last_n_lines.append(all_lines[-i])
+                last_n_lines.append(str(i) + " " + all_lines[-i])
             
         # Join the list of lines back into a single string
         return "\n".join(last_n_lines)
@@ -237,40 +270,23 @@ def get_log_list():
     return render_template("log.html", log_filenames=log_filenames)
 
 
-@app.route("/log/<filename>", methods=["GET"])
-def get_specific_log(filename):
-    """
-    Reads and returns the content of a specific log file, defaulting to the last 20 lines.
-    Use ?lines=<n> query parameter to change the number of lines.
-    """
-    filepath = get_safe_log_path(filename)
-    
-    if not filepath or not os.path.exists(filepath):
-        abort(404, description=f"Log file '{filename}' not found or path is invalid.")
-        
-    # Get the 'lines' query parameter, default to 20 if not provided
-    # Ensure it's a positive integer
-    n_lines = 20 # Default value
-    try:
-        requested_lines = request.args.get('lines')
-        if requested_lines is not None:
-            n_lines = max(1, int(requested_lines))
-    except ValueError:
-        pass # Keep default if value is invalid
-        
-    
-    content = get_n_lines(filepath, n_lines)
-            
-    # Return the content as plain text
-    return Response(content, mimetype="text/plain")
-
-
-
 @app.route("/log/<log_name>", methods=["GET"])
 def get_log(log_name):
-    log_content = get_n_lines(LOG_DIR + log_name, 20)
+    filepath = get_safe_log_path(log_name)
+    
+    if not filepath or not os.path.exists(filepath):
+        abort(404, description=f"Log file '{filepath}' not found or path is invalid.")
+        
+    n_lines = int(request.args.get('lines', "20"))
+    errors = bool(int(request.args.get("errors", "0")))
+
+    logging.info(f"Showing logs for {filepath} {errors} {n_lines}")
+    if errors:
+        log_content = get_n_lines_with_errors(filepath, n_lines)
+    else:
+        log_content = get_n_lines(filepath, n_lines)
+        
     return Response(log_content, mimetype="text/plain")
-    return render_template("log.html", log_filenames=log_filenames)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

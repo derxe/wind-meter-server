@@ -26,6 +26,8 @@ client = MongoClient(url)
 logging.info("connected to MongoDB")
 db = client["weather_station_v2"]
 
+# wind speed conversion between RPMs measured to m/s 
+SPEED_RPM_TO_MS = 0.33/3.6
 
 def save_status_update(timestamp, data):
     if not data:
@@ -33,6 +35,8 @@ def save_status_update(timestamp, data):
         return
 
     data["timestamp"] = timestamp
+
+    
     
     index = db.statuses.insert_one(data)
 
@@ -234,6 +238,31 @@ def get_vbat():
     ])
     return result_str
 
+
+def get_status_values(data_key_name, duration_hours=6):
+    logging.info("Fetching vbat data from database")
+    logging.info(f"n docs {db.statuses.count_documents({})}")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+
+    exists = db.statuses.find_one({ data_key_name: { "$exists": True } })
+    if not exists:
+        return {
+            "error", "Status data with key: '" + data_key_name + "' doesnt exist."
+        }
+
+    cursor = db.statuses.find(
+        {"timestamp": {"$gte": start_time}}, {"_id": 0, "timestamp": 1, data_key_name: 1}
+    ).sort("timestamp", -1)
+
+    status_values = []
+    for doc in cursor:
+        status_values.append({
+            "value": doc[data_key_name],
+            "timestamp": doc["timestamp"]
+        })
+
+    return status_values
+
 def get_last_status():
     cursor = db.statuses.find(
         {},
@@ -250,6 +279,22 @@ def get_last_status():
         return None
 
     return data
+
+
+def get_last_statuses(n=1, shift=0):
+    cursor = (
+        db.statuses.find({}, {"_id": 0})
+        .sort("timestamp", -1)
+        .skip(shift)
+        .limit(n)
+    )
+
+    results = list(cursor)
+
+    for item in results:
+        item["timestamp"] = item["timestamp"].astimezone(TZ).isoformat()
+
+    return results
 
 def get_status_updates(duration_hours=None, fromToday=False):
     logging.info("Fetching status updates from database")
@@ -282,12 +327,32 @@ def get_status_updates(duration_hours=None, fromToday=False):
 
     return data
 
-def get_wind(duration_hours=6):
-    logging.info(f"Fetching wind data from the lsat {duration_hours} hours")
-    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
-    
+def get_wind(duration_hours: int = 6):
+    duration_shift = 0
+    end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
+    start_time = end_time - timedelta(hours=duration_hours)
+
     cursor = db.winds.find(
-        {"timestamp": {"$gte": start_time}},
+        {"timestamp": {"$gte": start_time, "$lte": end_time}},
+        {"_id": 0, "timestamp": 1, "value": 1}
+    ).sort("timestamp", -1)
+
+    data = []
+    for doc in cursor:
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
+        doc["value"] = round(doc["value"] * SPEED_RPM_TO_MS, 2)
+        data.append(doc)
+
+    return data
+
+
+def get_directions(duration_hours=6):
+    duration_shift = 0
+    end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
+    start_time = end_time - timedelta(hours=duration_hours)
+
+    cursor = db.dirs.find(
+        {"timestamp": {"$gte": start_time, "$lte": end_time}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
@@ -299,14 +364,66 @@ def get_wind(duration_hours=6):
     return data
 
 
+def get_bucketed_data(duration_hours=6):
+    logging.info(f"Fetching bucketed data from the lsat {duration_hours} hours")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
 
-def get_directions(duration_hours=6):
-    logging.info(f"Fetching directions from the lsat {duration_hours} hours")
+    # --- fetch data ---
+    winds = list(db.wind_bucketed.find(
+        {"timestamp": {"$gte": start_time}},
+        {"_id": 0}
+    ).sort("timestamp", -1))
+
+    dirs = list(db.dir_bucketed.find(
+        {"timestamp": {"$gte": start_time}},
+        {"_id": 0}
+    ).sort("timestamp", -1))
+
+    # --- index direction data by timestamp ---
+    dirs_map = {d["timestamp"]: d for d in dirs}
+
+    # --- merge datasets ---
+    merged = []
+    for w in winds:
+        ts = w["timestamp"]
+        d = dirs_map.get(ts)
+        direction =  d.get("mode") if d is not None else None 
+
+        merged.append({
+            "timestamp": ts.astimezone(TZ).isoformat(),
+            "avg": w.get("avg"),
+            "max": w.get("max"),
+            "dir": direction
+        })
+    
+    return merged
+
+
+def get_wind_bucketed(duration_hours=6):
+    logging.info(f"Fetching bucketed wind data from the lsat {duration_hours} hours")
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     
-    cursor = db.dirs.find(
+    cursor = db.wind_bucketed.find(
         {"timestamp": {"$gte": start_time}},
-        {"_id": 0, "timestamp": 1, "value": 1}
+        {"_id": 0} # , "timestamp": 1, "min": 1, "max": 1
+    ).sort("timestamp", -1)
+
+    data = []
+    for doc in cursor:
+        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
+        data.append(doc)
+
+    return data
+
+
+
+def get_dirs_bucketed(duration_hours=6):
+    logging.info(f"Fetching bucketed dir data from the lsat {duration_hours} hours")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+    
+    cursor = db.dir_bucketed.find(
+        {"timestamp": {"$gte": start_time}},
+        {"_id": 0} # , "timestamp": 1, "min": 1, "max": 1
     ).sort("timestamp", -1)
 
     data = []
@@ -355,22 +472,6 @@ def get_last_bucket_filled(type_name):
     return last_time.astimezone(TZ)
 
 
-def get_wind(duration_hours=6):
-    logging.info(f"Fetching wind data from the lsat {duration_hours} hours")
-    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
-    
-    cursor = db.winds.find(
-        {"timestamp": {"$gte": start_time}},
-        {"_id": 0, "timestamp": 1, "value": 1}
-    ).sort("timestamp", -1)
-
-    data = []
-    for doc in cursor:
-        doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
-        data.append(doc)
-
-    return data
-
 def create_average_wind_values():
     first_data_to_average = get_last_bucket_filled("wind")
     print("first_data_to_average", first_data_to_average)
@@ -385,7 +486,7 @@ def create_average_wind_values():
     for doc in cursor:
         timestamp = int(doc['timestamp'].astimezone(TZ).timestamp() * 1000)
         doc["x"] = timestamp
-        doc["y"] = doc["value"]
+        doc["y"] = doc["value"] * SPEED_RPM_TO_MS
         wind_data.append(doc)
     
     pprint.pprint(len(wind_data))
@@ -417,11 +518,11 @@ def create_average_dir_values():
     for doc in cursor:
         timestamp = int(doc['timestamp'].astimezone(TZ).timestamp() * 1000)
         doc["x"] = timestamp
-        doc["y"] = doc["value"]
+        doc["y"] = int((doc["value"] + 22.5) // 45 % 8)
         dirs_data.append(doc)
     
     pprint.pprint(len(dirs_data))
-    dirs_bucketed, last_bucket_filed_ms  = bucket_aggregate(dirs_data, modes=["median"])
+    dirs_bucketed, last_bucket_filed_ms  = bucket_aggregate(dirs_data, modes=["mode"])
     if dirs_bucketed is None:
         print("No data returned to be saved")
         return
@@ -519,20 +620,25 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
         timestamp = datetime.fromtimestamp(float(k) / 1000, tz=TZ)
         out_data = {"timestamp": timestamp}
         for mode in modes:
+            out_value = -123
             if mode == "min":
-                out_data[mode] = b["min"]["y"]
+                out_value = b["min"]["y"]
 
             elif mode == "max":
-                out_data[mode] = b["max"]["y"]
+                out_value = b["max"]["y"]
 
             elif mode == "median":
-                out_data[mode] = median(ys)
+                out_value = median(ys)
 
             elif mode == "mode":
-                out_data[mode] = mode_value(ys)
+                out_value = mode_value(ys)
 
             elif mode == "mean" or mode == "avg": 
-                out_data[mode] = sum(ys) / len(ys)
+                out_value = sum(ys) / len(ys)
+            else:
+                logging.critical(f"Non existing mode: {mode} for modes:{modes}")
+
+            out_data[mode] = round(out_value, 2)
         
         out.append(out_data)
 
@@ -576,16 +682,23 @@ if __name__ == "__main__":
     ).sort("timestamp", 1)
 
     result = [(doc["timestamp"], doc["value"]) for doc in cursor]
-    #for timestamp, value in result:
-    #    print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
+    for timestamp, value in result:
+        print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
     """
 
     #db.wind_bucketed.delete_many({})
     #db.dir_bucketed.delete_many({})
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "wind")
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "dir")
-    create_average_wind_values()
-    create_average_dir_values()
+    #create_average_wind_values()
+    #create_average_dir_values()
+
+    #cursor = db.dir_bucketed.find({}, {}).sort("timestamp", 1)
+
+    #for doc in cursor:
+    #    print(doc)
+    #for timestamp, value in result:
+    #    print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
 
 
     print("Number of statuses:", db.statuses.count_documents({}))

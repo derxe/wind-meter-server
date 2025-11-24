@@ -376,7 +376,7 @@ function render() {
     .map(({ timestamp: t, valueA: d, valueB: s }) => ({
       t,
       dir: d,
-      speed: s * 0.33 / 3.6,
+      speed: s,
     }));
 
   console.log("New results length:", SAMPLES.length);
@@ -419,7 +419,7 @@ function renderWindRose(data) {
     .map(({ timestamp: t, valueA: d, valueB: s }) => ({
       t,
       dir: d,
-      speed: s * 0.33 / 3.6,
+      speed: s,
     }));
 
     console.log("New results length:", SAMPLES.length);

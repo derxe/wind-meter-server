@@ -88,7 +88,7 @@ function updateStatusPannel(data) {
   if(isDeviceSleeping()) {
     bubleText = "Zzzz Zzzzz..."
     titleText = "Naprava počiva 😴 😴"
-    detailsText = `Naprava ne pošilja podatkov zvečer med <b>7 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
+    detailsText = `Naprava ne pošilja podatkov zvečer med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
     statusClass = "sleeping"
   }
 

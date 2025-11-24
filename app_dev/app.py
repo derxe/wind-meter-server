@@ -19,7 +19,7 @@ from flask_caching import Cache
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 app.secret_key = 'super-secret'
 Compress(app)
-cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': (60*20)})
+#cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': (60*20)})
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
 
@@ -72,6 +72,49 @@ def save_data():
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
 
 
+@app.route("/save_test/<sender_id>", methods=["GET", "POST"])
+def save_data_test_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got test save request from: {sender_id}. From ip: {ip}")
+
+    if request.method == "GET":
+        data = request.query_string.decode("utf-8")
+    elif request.method == "POST":
+        data = request.get_data(as_text=True)
+    else:
+        return "unknown protocol", 500
+
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("test_" + sender_id, data)
+    #try:
+    #    db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+    #except Exception as e:
+    #    print(f"[ERROR] Failed to save received data: {e}")
+    #    response += "error parsing data"
+
+    #response += f"prefs:\n"
+    #response += f"set_phone_num:069867551\n"
+    #response += f"url_prefs:http://46.224.24.144/veter_dev/save_prefs/\n"
+    #response += f"no_reset:1\n"
+    #response += f"sleep_enabled:1\n"
+    #response += f"sleep_hour_start:23\n"
+    #response += f"sleep_hour_end:1\n"
+    return Response(response, mimetype="text/plain")
+
+@app.route("/save_prefs/<sender_id>", methods=["POST"])
+def save_prefs_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got preferences save request from: {sender_id}. From ip: {ip}")
+
+    data = request.get_data(as_text=True)
+    
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("prefs_" + sender_id, data)
+
+    return Response(response, mimetype="text/plain")
+
 @app.route("/save/<sender_id>", methods=["GET", "POST"])
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
@@ -102,19 +145,30 @@ def save_data_sender_id(sender_id):
     return Response(response, mimetype="text/plain")
 
 
+@app.route("/peter/data/status/<data_key>.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def get_status_values(data_key):
+    duration_hours = float(request.args.get("duration", "6"))
+    return db.get_status_values(data_key, duration_hours=duration_hours)
 
 @app.route("/data/status.json", methods=["GET"])
-def status():
-    data = db.get_last_status()
-    return data
+def status_shift():
+    shift = int(request.args.get("shift", "0"))
+    return db.get_last_statuses(shift=shift)[0]
 
 @app.route("/data/wind.json", methods=["GET"])
-@cache.cached(query_string=True)
+#@cache.cached(query_string=True)
 def wind_data():
+    duration_hours = float(request.args.get("duration", "6"))
+    return db.get_bucketed_data(duration_hours=duration_hours)
+
+@app.route("/data/wind_all.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def wind_data_all():
     duration_hours = float(request.args.get("duration", "2"))
     data = {
         "winds": db.get_wind(duration_hours=duration_hours),
-        "dirs": db.get_directions(duration_hours=duration_hours)
+        "dirs": db.get_directions(duration_hours=duration_hours),
     }
 
     return data
@@ -124,8 +178,19 @@ def wind_peter():
     data = {
         'title': 'Sv. Peter',
         'statusData': db.get_last_status(),
+        'windData': db.get_bucketed_data(duration_hours=6),
     }
     return render_template("wind.html", **data)
+
+
+@app.route("/peter/info", methods=["GET"])
+def wind_peter_info():
+    data = {
+        'title': 'Sv. Peter',
+        'statusData': db.get_last_status(),
+    }
+    return render_template("info.html", **data)
+
 
 @app.route("/vbats", methods=["GET"])
 def get_vbats():
@@ -173,6 +238,36 @@ def directions():
     return Response(strdata, mimetype="text/plain")
 
 
+def get_n_lines_with_errors(file_name, n):
+    """
+    Reads the content of a file and returns only the last 'n' lines.
+    
+    If the file has fewer than 'n' lines, all lines are returned.
+    This is an efficient way to get the end of a file in Python.
+    """
+    try:
+        with open(file_name, "r") as f:
+            # Read all lines into a list
+            all_lines = f.readlines()
+            
+            # Use negative slicing [-n:] to get the last N lines.
+            # We join with "" because readlines() preserves the original newline characters.
+            last_n_lines = []
+            index = 0
+            for i in range(1, len(all_lines)):
+                if "errors=" in all_lines[-i] and "errors=;" in all_lines[-i]:
+                    continue
+                index += 1
+                if index > n:
+                    break
+                last_n_lines.append(str(i) + " err " + all_lines[-i])
+            
+        # Join the list of lines back into a single string
+        return "\n".join(last_n_lines)
+    except Exception as e:
+        return f"ERROR reading file: {e}"
+
+
 def get_n_lines(file_name, n):
     """
     Reads the content of a file and returns only the last 'n' lines.
@@ -189,7 +284,7 @@ def get_n_lines(file_name, n):
             # We join with "" because readlines() preserves the original newline characters.
             last_n_lines = []
             for i in range(1, min(n, len(all_lines))):
-                last_n_lines.append(all_lines[-i])
+                last_n_lines.append(str(i) + " " + all_lines[-i])
             
         # Join the list of lines back into a single string
         return "\n".join(last_n_lines)
@@ -230,38 +325,22 @@ def get_log_list():
     return render_template("log.html", log_filenames=log_filenames)
 
 
-@app.route("/log/<filename>", methods=["GET"])
-def get_specific_log(filename):
-    """
-    Reads and returns the content of a specific log file, defaulting to the last 20 lines.
-    Use ?lines=<n> query parameter to change the number of lines.
-    """
-    filepath = get_safe_log_path(filename)
-    
-    if not filepath or not os.path.exists(filepath):
-        abort(404, description=f"Log file '{filename}' not found or path is invalid.")
-        
-    # Get the 'lines' query parameter, default to 20 if not provided
-    # Ensure it's a positive integer
-    n_lines = 20 # Default value
-    try:
-        requested_lines = request.args.get('lines')
-        if requested_lines is not None:
-            n_lines = max(1, int(requested_lines))
-    except ValueError:
-        pass # Keep default if value is invalid
-        
-    
-    content = get_n_lines(filepath, n_lines)
-            
-    # Return the content as plain text
-    return Response(content, mimetype="text/plain")
-
-
-
 @app.route("/log/<log_name>", methods=["GET"])
 def get_log(log_name):
-    log_content = get_n_lines(LOG_DIR + log_name, 20)
+    filepath = get_safe_log_path(log_name)
+    
+    if not filepath or not os.path.exists(filepath):
+        abort(404, description=f"Log file '{filepath}' not found or path is invalid.")
+        
+    n_lines = int(request.args.get('lines', "20"))
+    errors = bool(int(request.args.get("errors", "0")))
+
+    logging.info(f"Showing logs for {filepath} {errors} {n_lines}")
+    if errors:
+        log_content = get_n_lines_with_errors(filepath, n_lines)
+    else:
+        log_content = get_n_lines(filepath, n_lines)
+        
     return Response(log_content, mimetype="text/plain")
     return render_template("log.html", log_filenames=log_filenames)
 

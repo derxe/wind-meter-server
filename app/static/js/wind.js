@@ -1,45 +1,181 @@
-console.log("wind.js loaded");
+console.log("wind.js v2 loaded");
 
+let unit="ms"
+let displayDuration;
 $(function() {
+    displayDuration = $('#select-display-duration').val();
+    console.log("Display duration:", displayDuration);
+    $('#select-display-duration').on('change', function () {
+      displayDuration = parseInt($(this).val(), 10);
+      console.log("Display duration:", displayDuration);
+      getWindData();
+    });
     getWindData();
+
+    onToggleButtons("toggle-buttons-speed", (selectedValue) => {
+      unit = selectedValue;
+      console.log("Selected a new speed unit:", unit);
+    
+      updateGraphUnit();
+      updateMaxAvgUnit();
+    })
+
+    onToggleButtons("toggle-buttons-detail", (selectedValue) => {
+      console.log("Selected:", selectedValue);
+
+      if(selectedValue == "detailed") {
+        unhideDatasetsKeepScale(windChart, [2], [0, 1]);
+        unhideDatasetsKeepScale(dirChart, [1], [0]);
+      } else {
+        unhideDatasetsKeepScale(windChart, [0, 1], [2]);
+        unhideDatasetsKeepScale(dirChart, [0], [1]);
+      }
+      windChart.update();
+    })
 });
 
 function getWindData() {
-    $.getJSON("data/wind.json", function(data) {
-        $('#loading-msg').hide();
+  $('#loading-msg').show();
+  $('#wind-chart').hide();
+  $('#dir-chart').hide();
+  $('.data-loading').removeClass('hidden').attr('aria-busy', 'true');
+  $.getJSON(`data/wind.json?duration=${displayDuration}`, function(data) {
+      $('#loading-msg').hide();
+      $('#wind-chart').show();
+      $('#dir-chart').show();
+      $('.data-loading').addClass('hidden').attr('aria-busy', 'false');
 
-        console.log('Wind data loaded:', data);
-        updateWindGraph(data);
-        updateDirectionGraph(data);
-        updateDirectionGraph2(data);
-    });
+      console.log('Wind data loaded:', data);
+      updateWindGraph(data);
+      updateDirectionGraph(data);
+
+      renderWindRose(data);
+      //updateDirectionGraph2(data);
+  });
 }
+
+function updateMaxAvgUnit() {
+  if (unit === "kmh") {
+    $("#avg-value").text((lastAvgValue * 3.6).toFixed(0));
+    $("#max-value").text((lastMaxValue * 3.6).toFixed(0));
+    $("#avg-unit").text("km/h");
+    $("#max-unit").text("km/h");
+  } else {
+    $("#avg-value").text(lastAvgValue.toFixed(1));
+    $("#max-value").text(lastMaxValue.toFixed(1));
+    $("#avg-unit").text("m/s");
+    $("#max-unit").text("m/s");
+  }
+}
+
+
+
+let msStepSize = 0; // m/s step size so that we can restore it when toggling back to m/s
+let def_yScaleTicksCallback;
+function updateGraphUnit() {
+  const yScale = windChart.options.scales.y;
+  const tooltip = windChart.options.plugins.tooltip.callbacks;
+  if(!def_yScaleTicksCallback) def_yScaleTicksCallback = yScale.ticks.callback;
+
+  if (unit === "kmh") {
+    yScale.ticks.callback = (v) => (v * 3.6).toFixed(0) + "";
+    tooltip.label = (ctx) => (ctx.parsed.y * 3.6).toFixed(0) + " km/h";
+
+    const step = 5;
+    msStepSize = yScale.ticks.stepSize;
+    yScale.ticks.stepSize = step / 3.6;
+  } else {
+    if(def_yScaleTicksCallback) yScale.ticks.callback = def_yScaleTicksCallback;
+    else yScale.ticks.callback = (v) => v.toFixed(0) + "";
+
+    tooltip.label = (ctx) => ctx.parsed.y.toFixed(1) + " m/s";
+
+    yScale.ticks.stepSize = msStepSize;
+  }
+
+  currentUnit = unit;
+  windChart.update();
+}
+
+function unhideDatasetsKeepScale(chart, indicesShow, indicesHide) {
+  // 1. Capture current scale limits
+  const xScale = chart.scales.x;
+  const yScale = chart.scales.y;
+  const xMin = xScale.min;
+  const xMax = xScale.max;
+  const yMin = yScale.min;
+  const yMax = yScale.max;
+
+  // 2. Unhide selected datasets
+  indicesShow.forEach(i => {
+    chart.data.datasets[Math.abs(i)].hidden = false;
+  });
+
+  indicesHide.forEach(i => {
+    chart.data.datasets[Math.abs(i)].hidden = true;
+  });
+
+  // 3. Lock scales
+  chart.options.scales.x.min = xMin;
+  chart.options.scales.x.max = xMax;
+  chart.options.scales.y.min = yMin;
+  chart.options.scales.y.max = yMax;
+
+  // 4. Update chart
+  chart.update('none');
+}
+
+function onToggleButtons(id, listener) {
+  const $buttons = $(`#${id} button`);
+  let selectedValue = "ms"; // default
+
+  $buttons.on("click", function() {
+    const prevSelectedValue = selectedValue;
+    selectedValue = $(this).val();
+
+    $buttons
+      .removeClass("bg-slate-900 text-white")
+      .addClass("bg-white text-slate-600 hover:bg-slate-100");
+
+    $(this)
+      .removeClass("bg-white text-slate-600 hover:bg-slate-100")
+      .addClass("bg-slate-900 text-white");
+
+    if(prevSelectedValue != selectedValue)
+      listener(selectedValue);
+  });
+
+}
+
 
 function subtractHours(ms, hours) {
   return ms - hours * 60 * 60 * 1000;
 }
 
+let windChart;
+let lastAvgValue;
+let lastMaxValue;
 function updateWindGraph(data) {
-
-    let avgs = data?.avgs ?? [];
-    let maxs = data?.maxs ?? [];
+    let avgs = data?.winds ?? [];
     // let dirs = {{ data["dirs"] | tojson }}; // ignored for now
 
     // Convert to Chart.js point format {x: Date, y: Number}
-    const avgPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
-    const maxPoints = maxs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
+    const avgPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value}));
+    //const maxPoints = avgs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value * 0.33/3.6 }));
 
-    // { method: 'ema', halfLifeMinutes: 8 }
-    //const avgSmooth = smoothPoints(avgPoints, { method: 'gaussian', bandwidthMinutes: 4 });
-    //const maxSmooth = smoothPoints(maxPoints, { method: 'gaussian', bandwidthMinutes: 4 });
-
+    // { method: 'ema', halfLifeMinutes: 8 } method: 'gaussian', bandwidthMinutes: 0.2
+    const avgSmooth = smoothPoints(avgPoints, { method: 'gaussian', bandwidthMinutes: 0.8 });
     const avgGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'mean' });
-    const maxGrid = bucketAggregate(maxPoints, { minutes: 15, mode: 'max' });
+    const maxGrid = bucketAggregate(avgPoints, { minutes: 15, mode: 'max' });
 
     //const avgSmooth = smoothPoints(avgPoints, { method: 'moving', windowMinutes: 1 });
     //const maxSmooth = smoothPoints(maxPoints, { method: 'moving', windowMinutes: 1 });
 
     const ctx = document.getElementById('wind-chart').getContext('2d');
+
+    lastAvgValue = avgGrid[avgGrid.length-1].y;
+    lastMaxValue = maxGrid[maxGrid.length-1].y;
+    updateMaxAvgUnit();
 
     // Vertical lines at local midnights across the visible x-range
     const midnightLinesPlugin = {
@@ -69,34 +205,26 @@ function updateWindGraph(data) {
         }
     };
     
-    const now = Date.now();
-    const yMax = Math.max(...maxPoints.map(p => p.y));
-
-    const verticalLine = [
-      { x: now, y: 0 },
-      { x: now, y: yMax } // adjust to your y-axis max range
-    ];
-
-
     console.log("avgGrid", avgGrid)
 
     //minX = avgPoints[avgPoints.length-1].x
     //let maxX = avgPoints[0].x
     //let minX = subtractHours(maxX, 3);
-    const chart = new Chart(ctx, {
+
+  if (windChart) {
+    // Replace datasets’ data with new values
+    windChart.data.datasets[0].data = avgGrid;
+    windChart.data.datasets[1].data = maxGrid;
+    windChart.data.datasets[2].data = avgPoints;
+
+    // Tell Chart.js to re-render with new data
+    windChart.update();
+  } else {
+    windChart = new Chart(ctx, {
         type: 'line',
         data: {
         // no labels; each dataset has x/y
         datasets: [
-            {
-              label: 'Now',
-              data: verticalLine,
-              borderColor: 'red',
-              borderWidth: 2,
-              pointRadius: 0,
-              borderDash: [5, 5], // dashed line (optional)
-              fill: false
-            },
             {
                 label: "povprečna",
                 data: avgGrid,
@@ -105,7 +233,7 @@ function updateWindGraph(data) {
                 tension: 0.3,
                 pointRadius: 2,
                 borderColor: "#36a2eb", 
-                backgroundColor: "#9ad0f5"
+                backgroundColor: "#9ad0f5",
             },
             {
                 label: "maksimalna",
@@ -114,41 +242,32 @@ function updateWindGraph(data) {
                 tension: 0.3,
                 pointRadius: 2,
                 borderColor: "#ff6384", 
-                backgroundColor: "#ffb1c1"
+                backgroundColor: "#ffb1c1",
             },
             {
                 label: "all",
                 data: avgPoints,
-                borderWidth: 2,
+                borderWidth: 0,
                 avgGrid: 0,
                 tension: 0,
-                pointRadius: 0,
+                pointRadius: 3,
                 hidden: true,
-                borderColor: "#36a2eb30", 
-                backgroundColor: "#9ad0f530"
-            },
-                        {
-                label: "all max",
-                data: maxPoints,
-                borderWidth: 2,
-                avgGrid: 0,
-                tension: 0,
-                pointRadius: 0,
-                hidden: true,
-                borderColor: "#ff638430", 
-                backgroundColor: "#ffb1c130"
-            },
+                borderColor: "#36a2ebFF", 
+                backgroundColor: "#94cffa",
+            }
         ]
         },
         options: {
             plugins: {
                 legend: {
+                    display: false,
                     position: 'bottom',      
                     align: 'center',
                     labels: { usePointStyle: true, padding: 12 }
                 }
             },
             responsive: true,
+            maintainAspectRatio: false,
             parsing: false,           // we already provide {x,y}
             normalized: true,         // better perf for time scale
             scales: {
@@ -171,14 +290,19 @@ function updateWindGraph(data) {
         },
         //plugins: [midnightLinesPlugin]
     });
+
+  }
+
+   
 }
 
-
+let dirChart;
 function updateDirectionGraph(data) {
 
     let dir = data?.dirs ?? [];
 
-    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.angle }));
+    const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
+    const dirPoints = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.floor((d.value + 22.5) / 45) % 8 }));
     //const dirPoints2 = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: Math.round(d.value/360*8) }));
 
     const dirGrid = bucketAggregate(dirPoints, { minutes: 15, mode: 'mode' });
@@ -189,116 +313,106 @@ function updateDirectionGraph(data) {
 
     const ctx = document.getElementById('dir-chart').getContext('2d');
     //const directions = ["↑", "↖", "←", "↙", "↓", "↘", "→", "↗"];
-    const directions = ["S", "SV", "V", "JV", "J", "JZ", "Z", "SZ", " "];
+    const directions = ["S", "SV", "V", "JV", "J", "JZ", "Z", "SZ", "S"];
+    const dirFullNames = ["Sever", "SeveroVzhod", "Vzhod", "JugoVzhod", "Jug", "JugoZahod", "Zahod", "SeveroZahod", " "];
     //const directions = ["S", "SZ", "Z", "JZ", "J", "JV", "V", "SV", " "];
     //minX = avgPoints[avgPoints.length-1].x
     //let maxX = avgPoints[0].x
     //let minX = subtractHours(maxX, 3);
     const barWidthMs = 15 * 60 * 1000; // for x-minute spacing
-    const now = Date.now();
-    const yMin = 0.01;
-    const yMax = 8; // same as your y-axis max
 
-    const chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-        // no labels; each dataset has x/y
-        datasets: [
-         /* {
-              label: "smer",
-              data: dirGrid,
-              borderWidth: 2,
-          },*/
-          {
-              label: "smer",
-              data: dirGrid,
-              borderWidth: 2,
-              borderColor: "#4cc0c0", 
-              backgroundColor: "#a5dfdf"
+    const lastDirValue = dirGrid[dirGrid.length-1].y;
+    $("#wind-dir-value").text(dirFullNames[lastDirValue]);
+
+    if(dirChart) {
+      dirChart.data.datasets[0].data = dirGrid;
+      dirChart.data.datasets[1].data = dirPointsRaw;
+      dirChart.update();
+    } else {
+      dirChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+          datasets: [
+            {
+                label: "smer",
+                data: dirGrid,
+                borderWidth: 2,
+                borderColor: "#4cc0c0", 
+                backgroundColor: "#a5dfdf",
+            },
+            {
+                label: "smer2",
+                type: "scatter",
+                data: dirPointsRaw,
+                borderWidth: 1,
+                pointRadius: 3,
+                borderColor: "#4cc0c0", 
+                backgroundColor: "#a5dfdf",
+                hidden: true,
+            },
+          ]
           },
-          {
-            label: 'Now',
-            type: 'line',
-            data: [
-              { x: now, y: yMin },
-              { x: now, y: yMax }
-            ],
-            borderColor: 'red',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            pointRadius: 0,
-            fill: false
-          }
-        ]
-        },
-        options: {
-          plugins: {
-              legend: {
-                  position: 'bottom',        
-                  align: 'center',
-                  labels: { usePointStyle: true, padding: 12 }
-              },
-              datalabels: {
-                anchor: 'end',        // position at end (top)
-                align: 'top',         // align label above bar
-                color: '#333',
-                font: {
-                  weight: 'bold',
-                  size: 10
+          options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',        
+                    align: 'center',
+                    labels: { usePointStyle: true, padding: 12 }
                 },
-                formatter: function(value, context) {
-                  console.log(value.y, value.y == 0.1)
-                  return value.y == 0.01? "" : directions[value.y]
-                }
-              },
-              legend: {
-                display: false
-              }
-          },
-          responsive: true,
-          parsing: false,           // we already provide {x,y}
-          normalized: true,         // better perf for time scale
-          scales: {
-              x: {
-                type: 'time',
-                offset: false,
-                time: { displayFormats: { minute: 'HH:mm' } },
-                grid: { offset: false },
-ticks: {
-  callback: (val) => {
-    const d = new Date(val);
-    const now = Date.now();
-    const diff = Math.abs(val - now);
-
-    // if the tick is within ±5 minutes of "now"
-    if (diff < 0.5 * 60 * 1000) return "Now";
-
-    // only show labels every full hour
-    if (d.getMinutes() % 60 !== 0) return null;
-
-    return d.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  }
-},
-                min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
-                max: Math.max(now) + barWidthMs / 2,
-              },
-              y: {
-                  beginAtZero: true,
-                  position: 'left',
-                  max: 8,
-                  ticks: {
-                    stepSize: 1,
-                    callback: (value) => directions[value] || value
+                datalabels: {
+                  anchor: 'end',        // position at end (top)
+                  align: 'top',         // align label above bar
+                  color: '#333',
+                  font: {
+                    weight: 'bold',
+                    size: 10
                   },
-              },
-          }
-        },
-        plugins: [ChartDataLabels]
-    });
+                  formatter: function(value, context) {
+                    if (context.datasetIndex != 0) return ""; // dont display the label for scatter plot points
+                    return directions[value.y]
+                  }
+                },
+                legend: {
+                  display: false
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: false,           // we already provide {x,y}
+            normalized: true,         // better perf for time scale
+            scales: {
+                x: {
+                  type: 'time',
+                  offset: false,
+                  time: { displayFormats: { minute: 'HH:mm' } },
+                  grid: { offset: false },
+                  ticks: {
+                    callback: (val) => {
+                      const d = new Date(val);
+                      // only show labels every full hour
+                      if (d.getMinutes() % 60 !== 0) return null;
+                      return d.toLocaleTimeString([], { hour: '2-digit',minute: '2-digit',hour12: false });
+                    }
+                  },
+                  min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
+                  max: Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2,
+                },
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    max: 8,
+                    ticks: {
+                      stepSize: 1,
+                      callback: (value) => {
+                        return directions[value] || value
+                      }
+                    },
+                },
+            }
+          },
+          plugins: [ChartDataLabels]
+      });
+  }
 }
 
 function updateDirectionGraph2(data) {
@@ -412,62 +526,6 @@ function refreshGraph() {
     }
 
     chart.update();
-}
-
-
-// --- 1) Time-aware Exponential Moving Average (zero-lag via forward+back) ---
-function smoothEMA(points, { halfLifeMinutes = 5 } = {}) {
-  if (!points || points.length === 0) return [];
-  const th = halfLifeMinutes * 60 * 1000;      // half-life in ms
-  const LN2 = Math.log(2);
-
-  // forward pass
-  const f = new Array(points.length);
-  f[0] = { x: points[0].x, y: points[0].y };
-  for (let i = 1; i < points.length; i++) {
-    const dt = Math.max(0, points[i].x - points[i - 1].x);
-    const alpha = 1 - Math.exp(-LN2 * dt / th);
-    const y = f[i - 1].y + alpha * (points[i].y - f[i - 1].y);
-    f[i] = { x: points[i].x, y };
-  }
-
-  // backward pass (to reduce phase lag)
-  const b = new Array(points.length);
-  const n = points.length;
-  b[n - 1] = { x: points[n - 1].x, y: points[n - 1].y };
-  for (let i = n - 2; i >= 0; i--) {
-    const dt = Math.max(0, points[i + 1].x - points[i].x);
-    const alpha = 1 - Math.exp(-LN2 * dt / th);
-    const y = b[i + 1].y + alpha * (points[i].y - b[i + 1].y);
-    b[i] = { x: points[i].x, y };
-  }
-
-  // average forward/backward for zero-ish lag
-  const out = new Array(points.length);
-  for (let i = 0; i < points.length; i++) {
-    out[i] = { x: points[i].x, y: (f[i].y + b[i].y) / 2 };
-  }
-  return out;
-}
-
-// --- 2) Time-window Moving Average (minutes) ---
-function smoothMovingAvg(points, { windowMinutes = 10 } = {}) {
-  if (!points || points.length === 0) return [];
-  const W = windowMinutes * 60 * 1000;
-  const out = new Array(points.length);
-  let sum = 0, left = 0;
-
-  for (let i = 0; i < points.length; i++) {
-    const xi = points[i].x;
-    sum += points[i].y;
-    while (xi - points[left].x > W) {
-      sum -= points[left].y;
-      left++;
-    }
-    const count = i - left + 1;
-    out[i] = { x: xi, y: sum / count };
-  }
-  return out;
 }
 
 function resampleLinear(points, { minutes = 5 } = {}) {

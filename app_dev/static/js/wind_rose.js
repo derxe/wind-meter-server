@@ -1,3 +1,80 @@
+
+let pctNodes;
+let hist; 
+
+$(function() {
+  pctNodes = drawRoseBarGraphLegend(unit);
+  loadWindRoseData();
+});
+
+
+function changeUnitsBarGraphLegend(unit) {
+  pctNodes = drawRoseBarGraphLegend(unit); 
+  drawLabelBarHeights(hist);
+}
+
+function showWindRoseDataLoading(isLoading) {
+  console.log("Show loading:", isLoading);
+  if(isLoading) {
+    $('#wind-rose-loading').show();
+  } else {
+    $('#wind-rose-loading').hide();
+  }
+}
+
+let all_wind_data;
+
+function loadWindRoseData() {
+  showWindRoseDataLoading(true);
+  $.getJSON(`data/wind_all.json?duration=12`, function(data) {
+      console.log('All wind data loaded:', data);
+      all_wind_data = data;
+      renderWindRose(data);
+      showWindRoseDataLoading(false);
+  });
+
+}
+
+function renderWindRose(data) {
+  initRoseParams();
+
+  result = combineAndInterpolate( data["dirs"], data["winds"]);
+  console.log(result);
+  console.log("Accessing samples");
+
+  SAMPLES = result.map(({ timestamp: t, valueA: d, valueB: s }) => ({ t:t, dir: d, speed: s*0.33/3.6 }));
+  render();
+
+  const timeSlider = $("#time-slider");
+  timeSlider.change(() => {
+    const minutes = timeSlider.val();
+    console.log("timeSlider: ", minutes)
+    $("#time-value").html("min: " + minutes);
+    
+    const dur = 20 * 60 * 1000;     // duration of the interval size 
+    const shift = minutes * 60 * 1000;
+    const lastData = new Date(result[0].timestamp).getTime();
+    const start = lastData - shift - dur;
+    const end = lastData - shift;
+    console.log(end, start);
+
+    SAMPLES = result
+    .filter(({ timestamp }) => {
+      const ts = new Date(timestamp).getTime();
+      return start <= ts && ts <= end;
+    })
+    .map(({ timestamp: t, valueA: d, valueB: s }) => ({
+      t,
+      dir: d,
+      speed: s,
+    }));
+
+    console.log("New results length:", SAMPLES.length);
+    render();
+  })
+}
+
+
 function interpolate(x1, y1, x2, y2, x) {
   if (x2 === x1) return y1; // prevent division by zero
   return y1 + ((y2 - y1) * (x - x1)) / (x2 - x1);
@@ -40,19 +117,19 @@ console.log("Declared samples");
 
 // ----------------- Konfiguracija -----------------
 // Zgornje meje razredov hitrosti (m/s). Zadnji razred bo "> zadnja_meja".
-const SPEED_BINS = [1, 2, 3, 5, 8, 10, 15, 20, 25];
+const SPEED_BINS = [1, 2, 4, 6, 8, 10];
 // Barve za vse razrede (bins.length + 1). 7 barv.
 const COLORS = [
-  '#143a8a', // 0–1.54
+  //'#143a8a', // 0–1.54
   '#1f69c1', // 1.54–3.09
-  '#268dd9', // 3.09–5.14
-  '#37b07a', // 5.14–8.23
-  '#5ad24e', // 8.23–10.80
-  '#a3ea3a', // 10.80–15.50
-  '#eaff3a',  // >15.50
+  //'#268dd9', // 3.09–5.14
+  '#37b07bff', // 5.14–8.23
+  '#53de47ff', // 8.23–10.80
+  'rgba(232, 255, 58, 1)', // 10.80–15.50
+  //'#eaff3a',  // >15.50
   'rgb(255, 169, 58)',  // >15.50
   'rgb(255, 86, 58)',  // >15.50
-  'rgb(255, 86, 58)',  // >15.50
+  'rgba(249, 37, 150, 1)',  // >15.50
 ];
 
 
@@ -63,13 +140,6 @@ function binIndexForSpeed(v){
   return SPEED_BINS.length; // indeks za "> zadnja meja"
 }
 
-function buildLabels(bins){
-  const labels = [];
-  labels.push(`0–${bins[0].toFixed(2)}`);
-  for (let i=1;i<bins.length;i++) labels.push(`${bins[i-1].toFixed(2)}–${bins[i].toFixed(2)}`);
-  labels.push(`> ${bins[bins.length-1].toFixed(2)}`);
-  return labels;
-}
 
 function buildHistogram(samples, sectorCount){
   const perSector = Array.from({length:sectorCount}, () => new Array(SPEED_BINS.length+1).fill(0));
@@ -132,40 +202,40 @@ function drawRose(canvas, samples){
   ctx.clearRect(0,0,W,H);
 
   const cx = W/2, cy = H/2, R = Math.min(W,H)*0.43;
-  const hist = buildHistogram(samples, sectorCount);
+  hist = buildHistogram(samples, sectorCount);
 
   const maxPct = Math.max(12, Math.ceil(Math.max(...hist.pctTotals)));
   drawRings(cx, cy, R, 6);
 
   // Kompas
-ctx.save();
-ctx.font = '700 28px system-ui';
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle';
-ctx.fillStyle = '#8990aaff'; // text color
+  ctx.save();
+  ctx.font = '700 28px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#8990aaff'; // text color
 
-// helper to draw text with background
-function drawLabelWithBg(text, x, y) {
-  const padding = 10; // px of space around text
-  const metrics = ctx.measureText(text);
-  const r = Math.max(metrics.width, 28) / 2 + padding;
+  // helper to draw text with background
+  function drawLabelWithBg(text, x, y) {
+    const padding = 10; // px of space around text
+    const metrics = ctx.measureText(text);
+    const r = Math.max(metrics.width, 28) / 2 + padding;
 
-  // background circle
-  ctx.beginPath();
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.arc(x, y-1, r, 0, Math.PI * 2);
-  ctx.fill();
+    // background circle
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.arc(x, y-1, r, 0, Math.PI * 2);
+    ctx.fill();
 
-  // text on top
-  ctx.fillStyle = '#8990aa';
-  ctx.fillText(text, x, y);
-}
+    // text on top
+    ctx.fillStyle = '#8990aa';
+    ctx.fillText(text, x, y);
+  }
 
-// Draw 4 directions
-drawLabelWithBg('S', cx, cy - (R + 36));
-drawLabelWithBg('V', cx + (R + 36), cy);
-drawLabelWithBg('J', cx, cy + (R + 36));
-drawLabelWithBg('Z', cx - (R + 36), cy);
+  // Draw 4 directions
+  drawLabelWithBg('S', cx, cy - (R + 36));
+  drawLabelWithBg('V', cx + (R + 36), cy);
+  drawLabelWithBg('J', cx, cy + (R + 36));
+  drawLabelWithBg('Z', cx - (R + 36), cy);
 
   // Mirno – notranji krog
   const rCalm = R * (calmInner/100);
@@ -189,7 +259,9 @@ drawLabelWithBg('Z', cx - (R + 36), cy);
   });
 
   for(let s=0;s<sectorCount;s++){
-    const a0 = ((s)*dTheta) - offset, a1 = ((s+1)*dTheta)-offset;
+    const a0 = ((s)*dTheta) - offset;
+    const a1 = ((s+1)*dTheta)-offset;
+
     for(let b=0;b<=SPEED_BINS.length;b++){
       const [p0,p1] = stacks[s][b];
       if (p1<=p0) continue;
@@ -235,7 +307,9 @@ drawLabelWithBg('Z', cx - (R + 36), cy);
   */
 
   // Interaktivni tooltip
+  /*
   canvas.onmousemove = (ev)=>{
+    debugger;
     const rect = canvas.getBoundingClientRect();
     const mx = (ev.clientX-rect.left)* (canvas.width/rect.width);
     const my = (ev.clientY-rect.top) * (canvas.height/rect.height);
@@ -249,7 +323,7 @@ drawLabelWithBg('Z', cx - (R + 36), cy);
     let bin = pctStack.findIndex(([p0,p1]) => p>=p0 && p<=p1);
     if (bin<0) { tooltip.style.opacity = 0; return; }
 
-    const dirCenter = (sector+0.5)*(360/sectorCount);
+    const dirCenter = (sector)*(360/sectorCount);
     const pctVal = (pctStack[bin][1]-pctStack[bin][0]);
     const last = SPEED_BINS[SPEED_BINS.length-1];
     const speedLabel = bin===0 ? `≤ ${SPEED_BINS[0].toFixed(2)}`
@@ -257,11 +331,12 @@ drawLabelWithBg('Z', cx - (R + 36), cy);
                                   : `> ${last.toFixed(2)}`);
 
     tooltip.textContent = `Smer ${dirCenter.toFixed(0)}°, ${speedLabel} m/s → ${pctVal.toFixed(2)}%`;
-    tooltip.style.left = ev.clientX + 'px';
-    tooltip.style.top  = ev.clientY + 'px';
+    tooltip.style.left = ev.clientX-100 + 'px';
+    tooltip.style.top  = ev.clientY-200 + 'px';
     tooltip.style.opacity = 1;
   };
   canvas.onmouseleave = ()=> tooltip.style.opacity = 0;
+  */
 
   // Draw border lines (rectangle around the whole canvas)
   /*
@@ -275,32 +350,86 @@ drawLabelWithBg('Z', cx - (R + 36), cy);
   */
 
   // ------------ Legenda (POPOLNOMA skladna z bin-i) ------------
-/*
-  const legend = document.getElementById('legend');
-  legend.innerHTML = '';
+  drawLabelBarHeights(hist);
+}
 
-  const labels = buildLabels(SPEED_BINS); // dolžina = bins+1
+const zero_bar_height = 6; // 6 % height for the bars that have 0%
 
-  const pctNodes = labels.map((lab,i)=>{
-    const row = document.createElement('div'); row.className='legend-row';
-    const left = document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='10px';
-    const chip = document.createElement('div'); chip.className='chip'; chip.style.background = COLORS[i % COLORS.length]; left.appendChild(chip);
-    const text = document.createElement('div'); text.textContent = `${lab} m/s`; left.appendChild(text);
-    const pct = document.createElement('div'); pct.className='muted'; pct.textContent='0.0%';
-    row.appendChild(left); row.appendChild(pct); legend.appendChild(row);
-    return pct; // vrni DOM node za kasnejšo posodobitev
-  });
-
+function drawLabelBarHeights(hist) {
   // Izračun celotnega % po binu (čez vse sektorje)
   const totalsPerBin = Array(SPEED_BINS.length+1).fill(0);
   for(const sector of hist.pct){ sector.forEach((v,i)=> totalsPerBin[i]+=v); }
 
-  totalsPerBin.forEach((v,i)=>{ if (pctNodes[i]) pctNodes[i].textContent = v.toFixed(1)+'%'; });
+  
+  totalsPerBin.unshift(hist.calmPct); // add calm procentage to the totals values for the lables
+  let maxLabelValue = Math.max(...totalsPerBin);
+  if(!maxLabelValue) maxLabelValue = 100;
+  totalsPerBin.forEach((v,i)=>{ 
+    proc_value = pctNodes[i].find(".legend-value");
+    chip = pctNodes[i].find(".chip");
+    if (!v) v = 0;
+    if (proc_value) proc_value.text(v.toFixed(0)+'%'); 
+    if (chip) chip.css('height', Math.round(((v/maxLabelValue)*(100-zero_bar_height)+zero_bar_height)) +'%');
+    //if (chip) chip.css('height', proc_to_height(v / maxLabelValue) +'px');
+  });
+}
 
-  // ----------------- "Testi" / samopreverjanje -----------------
-  console.assert(pctNodes.length === totalsPerBin.length, 'Legenda in število razredov se morata ujemati');
-  */
+function drawRoseBarGraphLegend(unit) {
+  function getDisplaySpeedValue(value) {
+    if(unit === "kmh") {
+      return Math.round(value*3.6);
+    } else {
+      if(Math.floor(value * 10) % 10 == 0) return value.toFixed(0);
+      else return value.toFixed(1);
+    }
 
+  }
+
+  function buildLabels(bins){
+    const labels = [];
+    let prevLabel = "0";
+    for (let i=0;i<bins.length;i++) {
+      upperLabel = getDisplaySpeedValue(bins[i]);
+      labels.push(`${prevLabel} – ${upperLabel}`);
+      prevLabel = upperLabel;
+    }
+    labels.push(`${getDisplaySpeedValue(bins[bins.length-1])} +`);
+    return labels;
+  }
+
+  const displayUnit = unit==="ms"? "m/s" : "km/h";
+  const legend = document.getElementById('legend');
+  legend.innerHTML = `
+        <div class="legend-item">
+            <span class="" style="font-size: 14px; padding-bottom:4px; color:#848484;padding-right: 5px;">%</span>
+          <span class="" style="font-size: 12px; color:#848484;padding-right: 5px;">${displayUnit}</span>
+        </div>
+      `;
+
+  const labels = buildLabels(SPEED_BINS); // dolžina = bins+1
+  labels.unshift(getDisplaySpeedValue(0)); // add the 0 m/s for the first speed 
+  let colors = ["black", ...COLORS]; // add the black color for the first speed 
+  
+  const pctNodes = $.map(labels, function(lab, i) {
+    let item = $(`
+        <div class="legend-item">
+          <div class="chip-holder relative">
+            <div class="chip " style="height:${zero_bar_height}%; background: ${colors[i % colors.length]};">
+              <div class="legend-value">.</div>
+            </div>
+          </div>
+          <div class="legend-label">${lab}</div>
+        </div>
+
+      `);
+
+      $(legend).append(item);
+
+      // return DOM node for the value so you can update it later
+      return item;
+  });
+
+  return pctNodes;
 }
 
 
@@ -376,7 +505,7 @@ function render() {
     .map(({ timestamp: t, valueA: d, valueB: s }) => ({
       t,
       dir: d,
-      speed: s * 0.33 / 3.6,
+      speed: s,
     }));
 
   console.log("New results length:", SAMPLES.length);
@@ -387,123 +516,7 @@ function render() {
 }
 
 
-function renderWindRose(data) {
-  initRoseParams();
 
-
-  result = combineAndInterpolate( data["dirs"], data["winds"]);
-  console.log(result);
-  console.log("Accessing samples");
-
-  SAMPLES = result.map(({ timestamp: t, valueA: d, valueB: s }) => ({ t:t, dir: d, speed: s*0.33/3.6 }));
-  render();
-
-  const timeSlider = $("#time-slider");
-  timeSlider.change(() => {
-    const minutes = timeSlider.val();
-    console.log("timeSlider: ", minutes)
-    $("#time-value").html("min: " + minutes);
-    
-    const dur = 20 * 60 * 1000;     // duration of the interval size 
-    const shift = minutes * 60 * 1000;
-    const lastData = new Date(result[0].timestamp).getTime();
-    const start = lastData - shift - dur;
-    const end = lastData - shift;
-    console.log(end, start);
-
-    SAMPLES = result
-    .filter(({ timestamp }) => {
-      const ts = new Date(timestamp).getTime();
-      return start <= ts && ts <= end;
-    })
-    .map(({ timestamp: t, valueA: d, valueB: s }) => ({
-      t,
-      dir: d,
-      speed: s * 0.33 / 3.6,
-    }));
-
-    console.log("New results length:", SAMPLES.length);
-    render();
-  })
-
-/*
-  function makeResponsiveCanvas(canvas, {
-maintainAspectRatio = false,
-aspectRatio = 2,           // width / height (Chart.js default ≈ 2)
-minHeight = 150,
-onResize = null            // callback(widthCSS, heightCSS, dpr)
-} = {}) {
-  const ctx = canvas.getContext('2d');
-
-  // ensure Chart.js-like inline styles if you want them explicitly on <canvas>
-  canvas.style.display = 'block';
-  canvas.style.boxSizing = 'border-box';
-
-  const parent = canvas.parentElement;
-  if (!parent) throw new Error('Canvas must be in the DOM.');
-
-  let rafId = 0;
-
-  function sizeOnce() {
-    const dpr = 2; //;Math.max(1, Math.round(window.devicePixelRatio || 1));
-    const pw = parent.clientWidth || parent.getBoundingClientRect().width || 0;
-    let ph = parent.clientHeight || parent.getBoundingClientRect().height || 0;
-
-    // If parent has no explicit height and we want aspect ratio, compute it
-    if (maintainAspectRatio) {
-      ph = Math.max(minHeight, Math.round(pw / aspectRatio));
-      // reflect CSS height/width like Chart.js does in responsive mode
-      canvas.style.width  = pw + 'px';
-      canvas.style.height = ph + 'px';
-    } else {
-      // fill parent height; if none, fallback
-      if (!ph) ph = Math.max(minHeight, Math.round(pw / aspectRatio));
-      canvas.style.width  = pw + 'px';
-      canvas.style.height = ph + 'px';
-    }
-
-    // Set the drawing buffer size (physical pixels)
-    const w = Math.max(1, Math.round(pw * dpr));
-    const h = Math.max(1, Math.round(ph * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-      // scale the context so drawing uses CSS pixels
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    if (typeof onResize === 'function') onResize(pw, ph, dpr);
-    console.log("Rescaled:");
-      render();
-  }
-
-  function schedule() {
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(sizeOnce);
-  }
-
-  // Observe parent size changes (like Chart.js’ responsive loop)
-  const ro = new ResizeObserver(schedule);
-  ro.observe(parent);
-
-  // React to DPR or viewport changes
-  window.addEventListener('resize', schedule);
-  let mq; try { mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`); } catch(_) {}
-  const dprHandler = () => schedule();
-  if (mq && mq.addEventListener) mq.addEventListener('change', dprHandler);
-
-  // Initial layout
-  schedule();
-
-  return () => {
-    ro.disconnect();
-    window.removeEventListener('resize', schedule);
-    if (mq && mq.removeEventListener) mq.removeEventListener('change', dprHandler);
-    if (rafId) cancelAnimationFrame(rafId);
-  };
-}
-makeResponsiveCanvas(canvas);
-*/
-}
 
 
 

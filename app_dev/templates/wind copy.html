@@ -4,73 +4,305 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.8" />
   <title>Sv. Peter: veterna postaja</title>
   <!-- Tailwind via CDN (no app JS) -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- <script src="https://cdn.tailwindcss.com"></script>
+  <script src="static/css/tailwind-3-4-17.min.js"></script> -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="/veter/static/js/wind_rose.js"></script>
-  <script src="/veter/static/js/status_update.js"></script>
-  <script src="/veter/static/js/windv2.js"></script>
+  <script src="static/js/wind_rose.js"></script>
+  <script src="static/js/status_update.js"></script>
+  <script src="static/js/wind.js"></script>
 
   <style>
-    /* === Shared === */
-    .status-bar,
-    .status-badge,
-    .status-dot {
-      transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+
+
+    @media (min-width: 1024px) {
+      .status-border {
+        mask-image: linear-gradient(
+          to right,
+          transparent 0%,
+          black 20%,
+          black 80%,
+          transparent 100%
+        );
+        -webkit-mask-image: linear-gradient(
+          to right,
+          transparent 0%,
+          black 20%,
+          black 80%,
+          transparent 100%
+        );
+      }
     }
 
-    /* === OK / Operational === */
-    .status-card.ok .status-bar       { background-color: rgba(52, 211, 153, 0.8); }   /* emerald-400/80 */
-    .status-card.ok .status-badge     { background-color: rgb(236, 253, 245); color: rgb(4, 120, 87); border-color: rgb(167, 243, 208); } /* bg-emerald-50 text-emerald-700 border-emerald-200 */
-    .status-card.ok .status-dot       { background-color: rgb(16, 185, 129); }          /* emerald-500 */
+    /* Base for all statuses on #header */
+    #header .status-border {
+      background: linear-gradient(
+        180deg,
+        var(--status-border-top) 4%,
+        var(--status-border-mid) 10%,
+        rgba(255, 255, 255, 0) 53%
+      );
+    }
 
-    /* === Offline === */
-    .status-card.offline .status-bar  { background-color: rgba(148, 163, 184, 0.7); }   /* slate-400/70 */
-    .status-card.offline .status-badge{ background-color: rgb(248, 250, 252); color: rgb(71, 85, 105); border-color: rgb(226, 232, 240); } /* bg-slate-50 text-slate-700 border-slate-200 */
-    .status-card.offline .status-dot  { background-color: rgb(148, 163, 184); }         /* slate-400 */
+    #header .status-badge {
+      background-color: var(--status-badge-bg);
+      color: var(--status-badge-fg);
+      border-color: var(--status-badge-border);
+    }
 
-    /* === Sleeping === */
-    .status-card.sleeping .status-bar { background-color: rgba(34, 211, 238, 0.7); }    /* cyan-400/70 */
-    .status-card.sleeping .status-badge{ background-color: rgb(236, 254, 255); color: rgb(14, 116, 144); border-color: rgb(165, 243, 252); } /* bg-cyan-50 text-cyan-700 border-cyan-200 */
-    .status-card.sleeping .status-dot { background-color: rgb(34, 211, 238); }          /* cyan-400 */
+    #header .status-dot {
+      background-color: var(--status-dot-bg);
+    }
 
-    /* === Error === */
-    .status-card.error .status-bar    { background-color: rgba(244, 63, 94, 0.8); }     /* rose-500/80 */
-    .status-card.error .status-badge  { background-color: rgb(255, 241, 242); color: rgb(190, 18, 60); border-color: rgb(254, 205, 211); }  /* bg-rose-50 text-rose-700 border-rose-200 */
-    .status-card.error .status-dot    { background-color: rgb(244, 63, 94); }           /* rose-500 */
+    /* This keeps your original “div div” behavior but driven by a variable */
+    #header div div {
+      background-color: var(--status-inner-bg, transparent);
+    }
 
-    /* === Non-Responsive === */
-    .status-card.non-responsive .status-bar  { background-color: rgba(251, 191, 36, 0.8); } /* amber-400/80 */
-    .status-card.non-responsive .status-badge{ background-color: rgb(255, 251, 235); color: rgb(146, 64, 14); border-color: rgb(254, 240, 138); } /* bg-amber-50 text-amber-800 border-amber-200 */
-    .status-card.non-responsive .status-dot  { background-color: rgb(251, 191, 36); }       /* amber-400 */
+    /* === OK (emerald) === */
+    #header.status-ok {
+      --status-border-top: rgba(16, 185, 129, 1);
+      --status-border-mid: rgba(16, 185, 129, 0.21);
+
+      --status-badge-bg: rgb(236, 253, 245);
+      --status-badge-fg: rgb(4, 120, 87);
+      --status-badge-border: rgb(167, 243, 208);
+
+      --status-dot-bg: rgb(16, 185, 129);
+      --status-inner-bg: rgba(236, 253, 245, 0.05);
+    }
+
+    /* === Offline (slate) === */
+    #header.status-offline {
+      --status-border-top: rgba(148, 163, 184, 1);
+      --status-border-mid: rgba(148, 163, 184, 0.21);
+
+      --status-badge-bg: rgb(248, 250, 252);
+      --status-badge-fg: rgb(71, 85, 105);
+      --status-badge-border: rgb(226, 232, 240);
+
+      --status-dot-bg: rgb(148, 163, 184);
+      --status-inner-bg: rgba(248, 250, 252, 0.1);
+    }
+
+    /* === Sleeping (cyan) === */
+    #header.status-sleeping {
+      --status-border-top: rgba(34, 211, 238, 1);
+      --status-border-mid: rgba(34, 211, 238, 0.21);
+
+      --status-badge-bg: rgb(236, 254, 255);
+      --status-badge-fg: rgb(14, 116, 144);
+      --status-badge-border: rgb(165, 243, 252);
+
+      --status-dot-bg: rgb(34, 211, 238);
+      --status-inner-bg: rgba(236, 254, 255, 0.2);
+    }
+
+    /* === Error (rose) === */
+    #header.status-error {
+      --status-border-top: rgba(244, 63, 94, 1);
+      --status-border-mid: rgba(244, 63, 94, 0.21);
+
+      --status-badge-bg: rgb(255, 241, 242);
+      --status-badge-fg: rgb(190, 18, 60);
+      --status-badge-border: rgb(254, 205, 211);
+
+      --status-dot-bg: rgb(244, 63, 94);
+      --status-inner-bg: rgba(255, 241, 242, 0.1);
+    }
+
+    /* === Non-Responsive (amber) === */
+    #header.status-non-responsive {
+      --status-border-top: rgba(251, 191, 36, 1);
+      --status-border-mid: rgba(251, 191, 36, 0.21);
+
+      --status-badge-bg: rgb(255, 251, 235);
+      --status-badge-fg: rgb(146, 64, 14);
+      --status-badge-border: rgb(254, 240, 138);
+
+      --status-dot-bg: rgb(251, 191, 36);
+      --status-inner-bg: rgba(255, 251, 235, 0.1);
+    }
+
+    .tooltip{
+      position:absolute; 
+      padding:8px 10px; 
+      font-size:12px; 
+      border-radius:8px; 
+      backdrop-filter:blur(6px); 
+      background:rgba(25,35,60,.72); 
+      color:var(--ink); 
+      transform:translate(-50%, -120%); 
+      white-space:nowrap; 
+      pointer-events:none; 
+      opacity:0; 
+      transition:opacity .12s ease;
+      z-index: 30;
+    }
+
+    .legend {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 2px;
+      text-align: center;
+    }
+
+    .legend-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 20px; /* keeps spacing even */
+    }
+
+    .legend-value {
+      font-size: 10px;
+      color: var(--muted, #64748b);
+    }
+/*
+    .chip {
+      height: 12px;
+      width: 28px;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+    }
+*/
+    .chip {
+      position: relative;     /* allow label to be positioned inside */
+      height: 22px;
+      width: 28px;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;   /* text sits at the bottom */
+      font-size: 10px;         /* label size */
+      color: white;            /* visible on dark bg */
+    }
+
+    .legend-label {
+      font-size: 12px;
+      white-space: nowrap;
+      /*border-top: solid rgb(160, 160, 160) 1px;*/
+      width: 100%;
+      border-radius: 4px;
+      color: black;
+      background: rgb(255, 255, 255, 0.45);
+    }
   </style>
 </head>
 
 <script>
   preloadedStatusData =  {{ statusData | tojson }}; 
+  preloadedWindData =  {{ windData | tojson }}; 
 </script>
-<body class="min-h-screen bg-indigo-50 text-slate-900"> <!-- bg-sky-100 -->
-  <!-- Header -->
-  <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-slate-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-      <!-- Left section -->
-      <div class="flex items-center gap-3">
-        <div>
-          <h1 class="text-lg leading-tight">Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span></h1>
+
+<script>
+  /*
+  // There was a problem with cloudgorge which prevented the tailwind to load so this is a 
+  // workaround to apply constant height for the cavas sie in order to prevent canvas 
+  // to be constatly resizable into higher and higher sizes 
+  $(function () {
+    // Tailwind Browser v4 exposes a global "tailwind" object.
+    // If it's missing, we assume Tailwind failed to load.
+    if (!window.tailwind) {
+      console.log("There is not tailwind??");
+      $('.chart-holder').each(function () {
+        $(this).css('height', '600px');
+      });
+    }
+  });
+  */
+</script>
+
+<body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> <!-- bg-sky-100 -->
+
+
+  <div id="header" class="status-ok">
+    <div class="relative bg-white" >
+    <div class="relative" >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div>
+            
+            <h1 class="text-lg leading-tight">
+              Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
+            </h1>
+
+            <div class="flex flex-row items-center justify-between h-full mt-3">
+              <span class="status-badge self-center w-auto inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
+                <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
+                <span id="status-title-text" class="pl-[2px] whitespace-nowrap">
+                  Naprava počiva 😴
+                </span>
+              </span>
+
+              <span id="status-detailed-text"
+                    class="text-xs text-slate-500 mt-0 ml-2">
+                ---
+              </span>
+            </div>
+
+          </div>
         </div>
       </div>
-    </div>
-  </header>
 
-  <!-- Content -->
-  <main class="max-w-7xl mx-auto px-1 lg:px-6 py-6 grid gap-6 lg:grid-cols-3 items-start">
-    <div class="status-card offline relative lg:col-span-3 mx-auto w-full lg:w-1/2">
+      </div>
+    </div>
+
+    <div class="status-border mx-auto w-full max-w-[96rem] pointer-events-non inset-x-0 bottom-0 h-[30px]"></div>
+  </div>
+<!--
+
+  <div id="header" class="status-ok">
+    <div class="relative bg-white" >
+    <div class="relative" >
+      <div class="max-w-7xl mx-auto px-8 sm:px-6 pb-3 pt-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div>
+            
+            <h1 class="text-lg leading-tight">
+              Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
+            </h1>
+
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between h-full mt-3">
+              <span class="status-badge sm:self-center self-start w-auto inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
+                <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
+                <span id="status-title-text" class="pl-[2px] whitespace-nowrap">
+                  Naprava počiva 😴
+                </span>
+              </span>
+
+              <span id="status-detailed-text"
+                    class="text-xs text-slate-500 mt-2 sm:mt-0 sm:ml-2">
+                ---
+              </span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </div>
+
+    <div class="status-border pointer-events-non inset-x-0 bottom-0 h-[25px]"></div>
+  </div>
+
+
+
+
+
+ <div class="status-card offline relative lg:col-span-3 mx-auto w-full lg:w-1/2">
      <div class="status-bar bg-black absolute left-[-3px] top-0 bottom-0 w-[15px] rounded-l-2xl"></div>
      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         
@@ -87,7 +319,14 @@
         <div id="status-title-text" class="mt-1 font-semibold text-slate-800">Loading status ...</div>
         <div id="status-detailed-text" class="mt-2 text-xs text-slate-500">---</div>
       </div>
-    </div> 
+    </div>   
+
+-->
+
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-1 lg:px-6 pt-3 grid gap-6 lg:grid-cols-3 items-start">
+   
 
     <!-- Left column: charts + wind rose (same width) -->
     <section class="lg:col-span-2 grid gap-6">
@@ -120,24 +359,25 @@
         </div>
 
         
-        <div class="relative w-full md:h-[25rem] h-60">
+        <div class="chart-holder relative w-full md:h-[25rem] h-60 ">
           {{ loading_overlay() }}
 
           <canvas id="wind-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <div class="flex flex-wrap justify-center items-center gap-4 text-center">
           <div class="inline-flex text-base text-slate-500 max-sm:justify-center max-sm:w-full">Nastavitve prikaza:</div>
 
           <select id="select-display-duration" class="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white">
-              <option value="1">1 ura</option>
-              <option value="3">3 ure</option>
               <option value="6" selected>6 ur</option>
               <option value="12">12 ur</option>
               <option value="24">24 ur</option>
               <option value="48">2 dni</option>
+              <option value="96">4 dni</option>
+              <option value="168">7 dni</option>
+              <option value="336">14 dni</option>
               <!--<option value="168">7 dni</option>-->
           </select>
 
@@ -152,7 +392,7 @@
           </div>
       </div>
     </div>
-
+      
       <!-- Wind Direction Card -->
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <!--{{ sleep_overlay() }}-->
@@ -166,12 +406,14 @@
             <div class="text-xs text-slate-500">trenutna smer</div>
           </div>
         </div>
-        <div class="relative w-full md:h-[25rem] h-60">
+        <div class="chart-holder relative w-full md:h-[25rem] h-60 ">
           {{ loading_overlay() }}
 
           <canvas id="dir-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
       </div>
+
+
 
       <!-- Temperature chart 
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
@@ -198,12 +440,10 @@
     <!-- Right column: device status + (moved) location/status/notes -->
     <aside class="lg:col-span-1 grid gap-6">
       
-            <!-- Wind rose over map  -->
+      <!-- Wind rose over map  -->
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4 ">
         <div class="flex items-center justify-between mb-2">
           <h3 class="pl-1 font-semibold">Vetrna roža</h3>
-
-         
         </div>
 
       
@@ -215,15 +455,36 @@
           
           <img src="/veter/static/img/peter_wide.jpg" class="absolute inset-0 h-full w-full object-cover z-1"/>
 
+          <div id="wind-rose-loading" class="absolute max-h-96 inset-0 flex flex-col items-center justify-center z-10">
+            <svg
+              class="animate-spin text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+              style="height:30px;width:30px"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity=".25" stroke-width="4"/>
+              <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4"/>
+            </svg>
+
+            <!--<span class="text-sm mt-2 text-white drop-shadow">Loading</span>-->
+          </div>
+
           <!-- Map placeholder -->
-          <div class="relative h-96 aspect-square ">
-            
+          <div class="relative max-h-96 aspect-square ">
             <canvas width=800 height=800 id="wind-rose" class="block relative z-2 w-full h-auto "></canvas>
             <div id="tooltip" class="tooltip"></div>
           </div>
         </div>
 
-        <div class="pt-2 w-100 text-center text-sm text-slate-500">
+        <div id="legend" class="legend mt-2 pe-2">
+          <div class="legend-item">
+            <div class="legend-value self-end">%</div>
+            <div class="chip" style="background: transparent; box-shadow:none"></div>
+            <div class="legend-label self-end">m/s</div>
+          </div>
+        </div>
+
+        <div class="pt-2 w-auto text-center text-sm text-slate-500">
           Razpon prikazanih vrednosti od <b id="rose-data-start">--:--</b> do <b id="rose-data-end">--:--</b>
         </div>
 

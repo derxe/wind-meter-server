@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 import pprint
 from math import floor, nan
 from typing import List, Dict, Any
+import numpy as np
+from pymongo import UpdateOne
 
 TZ = ZoneInfo("Europe/Berlin")
 UTC = ZoneInfo("UTC")
@@ -29,14 +31,10 @@ db = client["weather_station_v2"]
 # wind speed conversion between RPMs measured to m/s 
 SPEED_RPM_TO_MS = 0.33/3.6
 
-def save_status_update(timestamp, data):
+def save_status_update(data):
     if not data:
         print("No data to save")
         return
-
-    data["timestamp"] = timestamp
-
-    
     
     index = db.statuses.insert_one(data)
 
@@ -105,9 +103,83 @@ def generate_times(base_ts, start_s: int, end_s: int, count: int):
     return [day_start + timedelta(seconds=s) for s in secs]
 
 
+ERROR_CODE_MAP_V2 = {
+    e["code"]: e["code_name"]
+    for e in [
+        { "code": 0,  "code_name": "ERR_NONE" },
+        { "code": 1,  "code_name": "ERR_SEND_AT_FAIL" },
+        { "code": 2,  "code_name": "ERR_SEND_NO_SIM" },
+        { "code": 3,  "code_name": "ERR_SEND_CSQ_FAIL" },
+        { "code": 4,  "code_name": "ERR_SEND_REG_FAIL" },
+        { "code": 5,  "code_name": "ERR_SEND_CIMI_FAIL" },
+        { "code": 6,  "code_name": "ERR_SEND_GPRS_FAIL" },
+        { "code": 7,  "code_name": "ERR_SEND_HTTP_FAIL" },
+        { "code": 8,  "code_name": "ERR_SEND_REPEAT" },
+
+        { "code": 9,  "code_name": "ERR_DIR_READ" },
+        { "code": 10, "code_name": "ERR_DIR_READ_ONCE" },
+        { "code": 11, "code_name": "ERR_WIND_BUF_OVERWRITE" },
+        { "code": 12, "code_name": "ERR_WIND_SHORT_BUF_FULL" },
+        { "code": 13, "code_name": "ERR_SPEED_SHORT_BUF_FULL" },
+        { "code": 14, "code_name": "ERR_DIR_SHORT_BUF_FULL" },
+
+        { "code": 15, "code_name": "ERR_POWERON_RESET" },
+        { "code": 16, "code_name": "ERR_BROWNOUT_RESET" },
+        { "code": 17, "code_name": "ERR_PANIC_RESET" },
+        { "code": 18, "code_name": "ERR_WDT_RESET" },
+        { "code": 19, "code_name": "ERR_SDIO_RESET" },
+        { "code": 20, "code_name": "ERR_USB_RESET" },
+        { "code": 21, "code_name": "ERR_JTAG_RESET" },
+        { "code": 22, "code_name": "ERR_EFUSE_RESET" },
+        { "code": 23, "code_name": "ERR_PWR_GLITCH_RESET" },
+        { "code": 24, "code_name": "ERR_CPU_LOCKUP_RESET" },
+        { "code": 25, "code_name": "ERR_UNEXPECTED_RESET" },
+    ]
+}
+
+def parse_error_values(data):
+    """
+    Converts '2:3,9:1,15:1' → list of:
+    {
+        "code": 2,
+        "name": "ERR_SEND_NO_SIM",
+        "count": 3
+    }
+    """
+    if "errors" not in data:
+        return []
+    
+    errorsStr = data["errors"]
+    errors = []
+
+    for pair in errorsStr.split(","):
+        if ":" not in pair:
+            continue
+
+        num_str, count_str = pair.split(":", 1)
+
+        try:
+            code = int(num_str)
+            count = int(count_str)
+        except ValueError:
+            continue
+
+        err = {}
+        err["code"] = code
+        err["count"] = count
+
+        if "ver" in data and data["ver"] == "v2":
+            err["name"] = ERROR_CODE_MAP_V2.get(code, "UNKNOWN")
+
+        errors.append(err)
+
+    data["errors_parsed"] = errors 
+
 
 def parse_status_update(line, base_ts):
     data = {}
+    data["timestamp"] = base_ts # add timestamp to the data
+    
     for part in line.split(";"):
         if "=" in part:
             key, val = part.split("=")
@@ -115,6 +187,9 @@ def parse_status_update(line, base_ts):
             
         #else:
         #    print(f"No = in the status part. part:'{part}'")
+
+    parse_error_values(data)
+    calc_vbat_change_rate(data)
 
     requiredFields = ["logFirst", "logLast", "len", "avg", "dir"]
 
@@ -199,6 +274,62 @@ def save_recived_data(line, timestamp):
     if winds_data is not None:
         save_wind_data(winds_data)
 
+
+WINDOW_MINUTES = 90
+WINDOW = timedelta(minutes=WINDOW_MINUTES)
+
+def calc_vbat_change_rate(data):
+    # we change all the last 2 * WINDOW size of values each time we get a new vbat value
+    # why 3*window? we need to grab enough values so that the last value slope is calculated correctly  
+    start_time = data["timestamp"] - timedelta(minutes=WINDOW_MINUTES*3)
+    end_time = data["timestamp"]
+    statuses = list(db.statuses.find(
+        {"timestamp": {"$gte": start_time, "$lt": end_time}},
+        {}
+        ).sort("timestamp", 1))
+    
+    timestamps = [x["timestamp"] for x in statuses]
+    values = [float(x["vbatIde"]) for x in statuses]
+
+    # add the newes vbatIde value from the latest data value
+    timestamps.append(data["timestamp"])
+    values.append(float(data["vbatIde"]))
+
+    slope1 = caluculate_change_rate(values, timestamps)
+    slope2 = caluculate_change_rate(slope1, timestamps)
+
+    data["vbat_rate1"] = round(slope1[-1]*1000, 2) if len(slope1) > 0 else None
+    data["vbat_rate2"] = round(slope2[-1]*1000, 2) if len(slope2) > 0 else None
+
+def caluculate_change_rate(values, timestamps):
+    slopes = []
+
+    for i in range(len(values)):
+        t_now = timestamps[i]
+
+        # collect points in [t_now - WINDOW, t_now]
+        t_win = []
+        v_win = []
+        j = i
+        while j >= 0 and (t_now - timestamps[j]) <= WINDOW:
+            t_win.append(timestamps[j])
+            v_win.append(values[j])  # use smoothed values for regression
+            j -= 1
+
+        if len(t_win) < 2:
+            #slopes.append(None)
+            continue
+
+        # convert times to minutes relative to first point in window
+        t0 = t_win[-1]
+        t_rel = np.array([(t - t0).total_seconds() / 60.0 for t in t_win])
+        v_arr = np.array(v_win)
+
+        # linear regression: v = a * t + b  -> a = slope [V/min]
+        a, b = np.polyfit(t_rel, v_arr, 1)
+        slopes.append(float(a*60))
+
+    return slopes
 
 def parse_wind_speed_chunk(wind_chunk):
     winds = {}
@@ -366,7 +497,15 @@ def get_directions(duration_hours=6):
 
 def get_bucketed_data(duration_hours=6):
     logging.info(f"Fetching bucketed data from the lsat {duration_hours} hours")
-    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+    latest = db.wind_bucketed.find_one(
+        {}, 
+        {"timestamp": 1, "_id": 0},
+        sort=[("timestamp", -1)]
+    )
+    if not latest or "timestamp" not in latest:
+        return []   # no data in DB
+
+    start_time = latest["timestamp"] - timedelta(hours=duration_hours)
 
     # --- fetch data ---
     winds = list(db.wind_bucketed.find(
@@ -664,17 +803,67 @@ if __name__ == "__main__":
             print(".", end="", flush=True)
     """
 
+
+    start_time = datetime.now(TZ) - timedelta(hours=24*4)
+    statuses = list(db.statuses.find(
+        {"timestamp": {"$gte": start_time}}, 
+        {}
+        ).sort("timestamp", 1))[10:]
+    
     """
-    cursor = db.statuses.find(
-            {},  # empty filter = match all
-            {"_id": 0, "timestamp": 1, "vbatIde": 1}
-        ).sort("timestamp", 1)
+    timestamps = [x["timestamp"] for x in statuses]
+    values = [float(x["vbatIde"]) for x in statuses]
+
+    slope1 = caluculate_slopes(values, timestamps)
+    slope2 = caluculate_slopes(slope1, timestamps)
+    print("All statueses")
+    #pprint.pprint(statuses)
+
+    slope1 = [round(x * 1000, 1) for x in slope1]
+    slope2 = [round(x * 1000, 1) for x in slope2]
+    print(values)
+    print(slope1)
+    print()
+    print(slope2)
+    #print(timestamps)
+    print(len(values))
+
+    """
+    ops = []
+    for doc in statuses:
+        parse_error_values(doc)
+        calc_vbat_change_rate(doc)
+
+        doc_id = doc["_id"]
+        doc.pop("_id", None)   # _id must NOT be inside $set
+
+        ops.append(
+            UpdateOne(
+                {"_id": doc_id},
+                {
+                    "$set": doc,
+                }
+            )
+        )
+
+    if ops:
+        pprint.pprint(ops)
+        #db.statuses.bulk_write(ops, ordered=False)
+    
+        
+    """
+    for status in statuses:
+        parse_error_values(status)
+        calc_vbat_change_rate(status)
+        #pprint.pprint(status)
+        #print(status["vbat_rate1"], status["vbat_rate2"])
+
+    
 
     result = [(doc["timestamp"], doc["vbatIde"]) for doc in cursor]
     for timestamp, dir in result:
         print(f"{timestamp.astimezone(TZ).isoformat()};{dir}")
 
-    
 
     cursor = db.winds.find(
         {},  # match all

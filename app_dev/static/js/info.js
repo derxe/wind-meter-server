@@ -9,11 +9,34 @@ function showLoading(isLoading) {
   }
 }
 
+function onToggleButtons(id, listener) {
+  const $buttons = $(`#${id} button`);
+  let selectedValue = "ms"; // default
+
+  $buttons.on("click", function() {
+    const prevSelectedValue = selectedValue;
+    selectedValue = $(this).val();
+
+    $buttons
+      .removeClass("bg-slate-900 text-white")
+      .addClass("bg-white text-slate-600 hover:bg-slate-100");
+
+    $(this)
+      .removeClass("bg-white text-slate-600 hover:bg-slate-100")
+      .addClass("bg-slate-900 text-white");
+
+    if(prevSelectedValue != selectedValue)
+      listener(selectedValue);
+  });
+}
+
 
 
 let displayDuration;
 let currentGraph;
+let currentGraphY2;
 let statusShift = 0;
+let displayLogs = "all";
 $(function() {
   showLoading(false);
   $('#chart-holder').hide();
@@ -25,6 +48,7 @@ $(function() {
     displayDuration = parseInt($(this).val(), 10);
     console.log("Display duration:", displayDuration);
     showGraph();
+    showGraphY2();
   });
 
   $('#status-shift-value').on('click', function () {
@@ -45,10 +69,21 @@ $(function() {
     loadStatus();
   });
 
-  $.get(`https://to-ni.dev/veter/log/293400130492916.txt`, function (text) {
+  onToggleButtons('toggle-show-log-errors', (selectedValue) => {
+      displayLogs = selectedValue;
+      loadRawLogs();
+  });
+
+  loadRawLogs();
+
+});
+
+function loadRawLogs() {
+  showOnlyErrors = displayLogs === "all" ? "0" : "1";
+  $.get(`https://to-ni.dev/veter/log/293400130492916.txt?errors=${showOnlyErrors}`, function (text) {
       displayRawLogs(text);
   });
-});
+}
 
 function rawLogClicked(i) {
   statusShift = i;
@@ -106,18 +141,29 @@ function displayStatusInfo(dataKey, name, value, showBtnGraph=false) {
   
   if(showBtnGraph) content = `
     <div class="flex items-center justify-between">
-      <span class="text-sm text-slate-500">${name}</span>
+      <span class="text-sm text-slate-500">${name}:</span>
 
-      <button 
-        onclick="showNewGraph('${dataKey}', '${name}')"
-        class="flex items-center gap-2 p-1 rounded hover:bg-slate-200"
-        title="Pokaži graf"
-      >
+      <span class="flex items-center gap-1 p-1">
         <span class="text-base text-right font-semibold text-slate-800">
           ${value ?? "--"}
         </span>
-        Graph ->
-      </button>
+        Graph:
+        <button 
+          onclick="showNewGraph('${dataKey}', '${name}')"
+          class="p-1 px-4 rounded hover:bg-slate-200"
+          title="Pokaži graf"
+        >
+          1
+        </button>
+
+        <button 
+          onclick="showNewGraphY2('${dataKey}', '${name}')"
+          class="p-1 px-4 rounded hover:bg-slate-200"
+          title="Pokaži graf"
+        >
+          2
+        </button>
+      </span>
     </div>
   `; else content = `
     <div class="flex items-center justify-between">
@@ -135,42 +181,70 @@ function displayStatusInfo(dataKey, name, value, showBtnGraph=false) {
 
 
 function showGraph() {
+  if (currentGraph === undefined || !("dataKey" in currentGraph)) return;
+
   let { dataKey, dataName } = currentGraph;
+  if(dataKey == null) return; // no data to load 
   $('#chart-holder').show();
   $('#grap-name').html(dataName);
   showLoading(true);
   $.getJSON(`data/status/${dataKey}.json?duration=${displayDuration}`, function(data) {
       showLoading(false);
       console.log('Got data to display:', data);
-      drawGraph(data, dataName);
+      drawGraph(data, dataName, "y1");
   });
 
   console.log("Show graphs:", currentGraph);
 }
 
+function showGraphY2() {
+  if (currentGraphY2 === undefined || !("dataKey" in currentGraphY2)) return;
 
-function showNewGraph(dataKey, dataName) {
-  currentGraph = {}
-  currentGraph.dataKey = dataKey;
-  currentGraph.dataName = dataName;
+  let { dataKey, dataName } = currentGraphY2;
+  $('#chart-holder').show();
+  $('#grap-name-y2').html(dataName);
+  showLoading(true);
+  $.getJSON(`data/status/${dataKey}.json?duration=${displayDuration}`, function(data) {
+      showLoading(false);
+      console.log('Got data to display:', data);
+      drawGraph(data, dataName, "y2");
+  });
+
+  console.log("Show graphs:", currentGraphY2);
+}
+
+function getGraphData(dataKey, dataName) {
+  graphData = {}
+  graphData.dataKey = dataKey;
+  graphData.dataName = dataName;
 
   if(dataKey == "vsol") {
-    currentGraph.min = 0;
-    currentGraph.max = 8;
+    graphData.min = 0;
+    graphData.max = 8;
   } else if(dataKey == "vbatIde" || dataKey == "vbatGprs") {
-    currentGraph.min = 3.4;
-    currentGraph.max = 4.2;
+    graphData.min = 3.4;
+    graphData.max = 4.2;
   } else {
-    currentGraph.min = null;
-    currentGraph.max = null;
+    graphData.min = null;
+    graphData.max = null;
   }
 
+  return graphData;
+}
+
+function showNewGraph(dataKey, dataName) {
+  currentGraph = getGraphData(dataKey, dataName);
   showGraph();
+}
+
+function showNewGraphY2(dataKey, dataName) {
+  currentGraphY2 = getGraphData(dataKey, dataName);
+  showGraphY2();
 }
 
 
 let chart;
-function drawGraph(data, dataName) {
+function drawGraph(data, dataName, axis) {
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const dataValues = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: parseFloat(d.value)}));
   const ctx = document.getElementById('status-chart').getContext('2d');
@@ -184,7 +258,8 @@ function drawGraph(data, dataName) {
         datasets: [
             {
                 label: dataName,
-                data: dataValues,
+                data: [],
+                yAxisID: 'y', 
                 borderWidth: 2,
                 avgGrid: 0,
                 tension: 0,
@@ -193,28 +268,22 @@ function drawGraph(data, dataName) {
                 borderColor: "#36a2eb", 
                 backgroundColor: "#9ad0f5",
                 spanGaps: 1*60*60*1000, // dont draw the line if the data is more then 1 hour appart
-            },
-            /*{
-                label: "maksimalna",
-                data: maxGrid,
-                borderWidth: 2,
-                tension: 0.4,
-                pointRadius: 2,
-                borderColor: "#ff6384", 
-                backgroundColor: "#ffb1c1",
-                spanGaps: 1*60*60*1000,  // dont draw the line if the data is more then 1 hour appart
+                hidden: axis != "y1",
             },
             {
-                label: "all",
-                data: avgPoints,
-                borderWidth: 0,
+                label: "data2",
+                data: [],
+                yAxisID: 'y2', 
+                borderWidth: 2,
                 avgGrid: 0,
                 tension: 0,
-                pointRadius: 3,
-                hidden: true,
-                borderColor: "#36a2ebFF", 
-                backgroundColor: "#94cffa",
-            }*/
+                showLine: false,
+                pointRadius: 2,
+                borderColor: "red", 
+                backgroundColor: "#9ad0f5",
+                spanGaps: 1*60*60*1000, // dont draw the line if the data is more then 1 hour appart
+                hidden: axis != "y2",
+            },
         ]
         },
         options: {
@@ -248,24 +317,38 @@ function drawGraph(data, dataName) {
                 },
               },
               y: {
-                  beginAtZero: true,
-                  position: 'left',
+                position: 'left',
               },
+              y2: {
+                position: 'right',
+              }
           }
-        },
-        //plugins: [midnightLinesPlugin]
+        }
     });
   }
 
-  if(currentGraph.min && currentGraph.max) {
-    chart.options.scales.y.min = currentGraph.min;
-    chart.options.scales.y.max = currentGraph.max;
-  } else {
-    chart.options.scales.y.min = undefined;
-    chart.options.scales.y.max = undefined;
+  if(axis == "y1") {
+    if(currentGraph.min != null && currentGraph.max != null) {
+      chart.options.scales.y.min = currentGraph.min;
+      chart.options.scales.y.max = currentGraph.max;
+    } else {
+      chart.options.scales.y.min = undefined;
+      chart.options.scales.y.max = undefined;
+    }
+    chart.data.datasets[0].data = dataValues;
+    chart.data.datasets[0].hidden = false;
+  } else if(axis == "y2") {
+    if(currentGraphY2.min != null && currentGraphY2.max != null) {
+      chart.options.scales.y2.min = currentGraphY2.min;
+      chart.options.scales.y2.max = currentGraphY2.max;
+    } else {
+      chart.options.scales.y2.min = undefined;
+      chart.options.scales.y2.max = undefined;
+    }
+    chart.data.datasets[1].data = dataValues;
+    chart.data.datasets[1].hidden = false;
   }
 
-  chart.data.datasets[0].data = dataValues;
   chart.update();  
 }
 
@@ -325,26 +408,24 @@ function setStatuionParametersPannel(data) {
   const signalQualityStr = `${signal.quality}, ${signal.dbm} dB`;
 
   displayedKeys = [];
-  displayStatusInfo("timestamp", "Čas meritve:", `${formattedDate(data["timestamp"])}<br>(pred ${timeSince(data["timestamp"])})`);
-  displayStatusInfo("phoneNum", "Telefonska:", data["phoneNum"] ?? "--");
-  displayStatusInfo("vbatIde", "Baterija:", (data["vbatIde"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("vbatGprs", "Baterija med GPRS:", (data["vbatGprs"] ?? "--") + " V", showBtnGraph=true);
+  displayStatusInfo("timestamp", "Čas meritve", `${formattedDate(data["timestamp"])}<br>(pred ${timeSince(data["timestamp"])})`);
+  displayStatusInfo("phoneNum", "Telefonska", data["phoneNum"] ?? "--");
+  displayStatusInfo("vbatIde", "Baterija", (data["vbatIde"] ?? "--") + " V", showBtnGraph=true);
+  displayStatusInfo("vbat_rate1", "Charging rate", (data["vbat_rate1"] ?? "--") + " V", showBtnGraph=true);
+  displayStatusInfo("vbat_rate2", "charging rate2", (data["vbat_rate2"] ?? "--") + " V", showBtnGraph=true);
+  displayStatusInfo("vbatGprs", "Baterija med GPRS", (data["vbatGprs"] ?? "--") + " V", showBtnGraph=true);
   displayStatusInfo("vsol", "Solar:", (data["vsol"] ?? "--") + " V", showBtnGraph=true);
   displayStatusInfo("signal", "Signal:", signalQualityStr, showBtnGraph=true);
-  displayStatusInfo("regDur", "Trajanje registracije:", (data["regDur"] ?? "--") + " s", showBtnGraph=true);
-  displayStatusInfo("gprsRegDur", "Trajanje GPRS registracije:", (data["gprsRegDur"] ?? "--") + " s", showBtnGraph=true);
-  displayStatusInfo("dur", "Trajanje skupaj:", (data["dur"] ?? "--") + " s", showBtnGraph=true);
-  displayStatusInfo("ver", "FW version:", data["ver"]);
+  displayStatusInfo("regDur", "Trajanje registracije", (data["regDur"] ?? "--") + " s", showBtnGraph=true);
+  displayStatusInfo("gprsRegDur", "Trajanje GPRS registracije", (data["gprsRegDur"] ?? "--") + " s", showBtnGraph=true);
+  displayStatusInfo("dur", "Trajanje skupaj", (data["dur"] ?? "--") + " s", showBtnGraph=true);
+  displayStatusInfo("ver", "FW version", data["ver"]);
 
   displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
 
   for (const [key, value] of Object.entries(data)) {
     if (displayedKeys.includes(key)) continue;
-
-    // simple default label – you can prettify if you want
-    const label = key + ":";
-
-    displayStatusInfo("", label, value ?? "--");
+    displayStatusInfo("", key, value ?? "--");
   }
 
   // simply display all the keys that werent already displayed 
@@ -360,9 +441,36 @@ function setStatuionParametersPannel(data) {
   displayStatusBar("Napetost solarne", `${vSolar} V`, vSolarProc, solarBarColor)
   //displayStatusBar("Temepratura", `12 ˚C`, "40", "#38bdf8")
 
+  const vbatRate = data["vbat_rate1"];
+  const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
+  const vbatRateProc = vbatRate / 100 * 100;
+  const vbatRateColor = batteryRateColorHex(vbatRateProc)
+  displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
+
+
   const signalBarColor = signalColorHex(signal.percent);
   displayStatusBar("Signal", signalQualityStr, signal.percent, signalBarColor)
 
+}
+
+function batteryRateColorHex(percent) {
+  if (percent === 0) return "#94a3b8"; // slate-400 (neutral)
+
+  // ------ DISCHARGING (negative) ------
+  if (percent < 0) {
+    const p = Math.abs(percent);
+
+    if (p <= 20) return "#fdba74";  // orange-300 (slow discharge)
+    if (p <= 50) return "#f97316";  // orange-500
+    if (p <= 80) return "#ef4444";  // red-500
+    return "#b91c1c";               // red-700 (fast discharge)
+  }
+
+  // ------ CHARGING (positive) ------
+  if (percent <= 20) return "#bbf7d0";  // green-200 (slow charge)
+  if (percent <= 50) return "#4ade80";  // green-400
+  if (percent <= 80) return "#22c55e";  // green-500
+  return "#84cc16";                     // lime-500 (fast charge)
 }
 
 function signalColorHex(percent) {
@@ -385,7 +493,7 @@ function displayStatusBar(name, value, precantage, color) {
       <div class="text-xs text-slate-500">${name}</div>
       <div class="font-semibold">${value}</div>
       <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
-        <div class="h-full w-4/5 bg-amber-500" style="background-color:${color}; width: ${precantage}%"></div>
+        <div class="h-full w-4/5 bg-amber-500" style="background-color:${color}; width: ${Math.abs(precantage)}%"></div>
       </div>
     </div>`;
 

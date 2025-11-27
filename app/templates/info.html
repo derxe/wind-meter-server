@@ -94,7 +94,8 @@
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-base">Graph of:</h2>
 
-             <span id="grap-name" class="text-sm ms-2 "></span>
+            <span id="grap-name" class="text-sm ms-2 "></span>
+            <span id="grap-name-y2" class="text-sm ms-2 "></span>
 
             <select id="select-display-duration" class="px-3 py-2 ms-4 text-sm rounded-xl border border-slate-200 bg-white">
                 <option value="6">6 ur</option>
@@ -123,6 +124,11 @@
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-base">Raw logs:</h2>
           </div>
+
+          <div id="toggle-show-log-errors" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="all">All</button>
+            <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="errors">Errors</button>
+          </div>
         </div>
 
         <div id="logs-value" 
@@ -138,7 +144,7 @@
   </main>
 
   <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
-    © 2025 Paraglidng Wind Station · Made with ❤️ to 🪂
+    © 2025 Paraglidng Wind Station · Made with ❤️ of 🪂
   </footer>
 </body>
 </html>

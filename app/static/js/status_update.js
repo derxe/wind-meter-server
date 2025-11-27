@@ -135,6 +135,31 @@ function setStatuionParametersPannel(data) {
   const signalBarColor = signalColorHex(signal.percent);
   displayStatusBar("Signal", signalQualityStr, signal.percent, signalBarColor)
 
+  const vbatRate = data["vbat_rate1"];
+  const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
+  const vbatRateProc = vbatRate / 100 * 100;
+  const vbatRateColor = batteryRateColorHex(vbatRateProc)
+  displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
+}
+
+function batteryRateColorHex(percent) {
+  if (percent === 0) return "#94a3b8"; // slate-400 (neutral)
+
+  // ------ DISCHARGING (negative) ------
+  if (percent < 0) {
+    const p = Math.abs(percent);
+
+    if (p <= 20) return "#fdba74";  // orange-300 (slow discharge)
+    if (p <= 50) return "#f97316";  // orange-500
+    if (p <= 80) return "#ef4444";  // red-500
+    return "#b91c1c";               // red-700 (fast discharge)
+  }
+
+  // ------ CHARGING (positive) ------
+  if (percent <= 20) return "#bbf7d0";  // green-200 (slow charge)
+  if (percent <= 50) return "#4ade80";  // green-400
+  if (percent <= 80) return "#22c55e";  // green-500
+  return "#84cc16";                     // lime-500 (fast charge)
 }
 
 function signalColorHex(percent) {
@@ -157,7 +182,7 @@ function displayStatusBar(name, value, precantage, color) {
       <div class="text-xs text-slate-500">${name}</div>
       <div class="font-semibold">${value}</div>
       <div class="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
-        <div class="h-full w-4/5 bg-amber-500" style="background-color:${color}; width: ${precantage}%"></div>
+        <div class="h-full w-4/5 bg-amber-500" style="background-color:${color}; width: ${Math.abs(precantage)}%"></div>
       </div>
     </div>`;
 

@@ -105,8 +105,8 @@ function onToggleButtons(id, listener) {
     if(prevSelectedValue != selectedValue)
       listener(selectedValue);
   });
-
 }
+
 function showLoading(isLoading) {
   if(isLoading) {
     $('#loading-msg').show();

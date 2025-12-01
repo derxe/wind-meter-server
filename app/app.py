@@ -71,7 +71,7 @@ def save_data():
     db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
 
-
+"""
 @app.route("/save_test/<sender_id>", methods=["GET", "POST"])
 def save_data_test_sender_id(sender_id):
     ip = request.remote_addr
@@ -101,6 +101,7 @@ def save_data_test_sender_id(sender_id):
     #response += f"sleep_hour_start:23\n"
     #response += f"sleep_hour_end:1\n"
     return Response(response, mimetype="text/plain")
+"""
 
 @app.route("/save_prefs/<sender_id>", methods=["POST"])
 def save_prefs_sender_id(sender_id):
@@ -115,10 +116,24 @@ def save_prefs_sender_id(sender_id):
 
     return Response(response, mimetype="text/plain")
 
+@app.route("/save_errors/<sender_id>", methods=["POST"])
+def save_errors_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got preferences save request from: {sender_id}. From ip: {ip}")
+
+    data = request.get_data(as_text=True)
+    
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("errors_" + sender_id, data)
+
+    return Response(response, mimetype="text/plain")
+
 @app.route("/save/<sender_id>", methods=["GET", "POST"])
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
     print(f"Got save request for: {sender_id}. From ip: {ip}")
+    logging.info(f"Got save request for: {sender_id}. From ip: {ip}")
 
     if request.method == "GET":
         data = request.query_string.decode("utf-8")
@@ -127,11 +142,48 @@ def save_data_sender_id(sender_id):
     else:
         return "unknown protocol", 500
 
+    print(f"Trying to save data: {data}")
+    logging.info(f"Trying to save data: {data}")
+
     response = f"saved: {len(data)}\n"
 
     save_query_to_log(sender_id, data)
     try:
         db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+    except Exception as e:
+        print(f"[ERROR] Failed to save received data: {e}")
+        response += "error parsing data"
+
+    #response = f"saved: {len(data)}\n"
+    #response += f"prefs:\n"
+    #response += f"pref_version:5\n"
+    #response += f"send_error_names:1\n"
+    #response += f"sleep_hour_start:23\n"
+    #response += f"sleep_hour_end:1\n"
+    return Response(response, mimetype="text/plain")
+
+@app.route("/save_test/<sender_id>", methods=["GET", "POST"])
+def save_data_test_sender_id(sender_id):
+    ip = request.remote_addr
+    print(f"Got save request for: {sender_id}. From ip: {ip}")
+    logging.info(f"Got save request for: {sender_id}. From ip: {ip}")
+
+    if request.method == "GET":
+        data = request.query_string.decode("utf-8")
+    elif request.method == "POST":
+        data = request.get_data(as_text=True)
+    else:
+        return "unknown protocol", 500
+
+    print(f"Trying to save data: {data}")
+    logging.info(f"Trying to save data: {data}")
+
+    response = f"saved: {len(data)}\n"
+
+    save_query_to_log("test_" + sender_id, data)
+    try:
+        a = 1
+        #db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         print(f"[ERROR] Failed to save received data: {e}")
         response += "error parsing data"
@@ -223,8 +275,6 @@ def max_wind():
         strdata += f"{d['timestamp']};  {d['value']}\n"
     
     return Response(strdata, mimetype="text/plain")
-
-
 
 @app.route("/dir", methods=["GET"])
 def directions():

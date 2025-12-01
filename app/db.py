@@ -188,8 +188,8 @@ def parse_status_update(line, base_ts):
         #else:
         #    print(f"No = in the status part. part:'{part}'")
 
-    parse_error_values(data)
-    calc_vbat_change_rate(data)
+    #parse_error_values(data)
+    #calc_vbat_change_rate(data)
 
     requiredFields = ["logFirst", "logLast", "len", "avg", "dir"]
 
@@ -267,9 +267,9 @@ def save_recived_data(line, timestamp):
         logging.warning(f"No data found in line: {line}")
         return
     
-    #logging.info(f"Saving status update at {timestamp} with data: {data} and winds data: {winds_data}")
+    logging.info(f"Saving status update at {timestamp} with data: {data} and winds data: {winds_data}")
 
-    save_status_update(timestamp, data)
+    save_status_update(data)
 
     if winds_data is not None:
         save_wind_data(winds_data)

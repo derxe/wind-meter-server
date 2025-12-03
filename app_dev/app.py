@@ -119,6 +119,7 @@ def save_prefs_sender_id(sender_id):
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
     print(f"Got save request for: {sender_id}. From ip: {ip}")
+    logging.info(f"Got save request for: {sender_id}. From ip: {ip}")
 
     if request.method == "GET":
         data = request.query_string.decode("utf-8")
@@ -134,6 +135,7 @@ def save_data_sender_id(sender_id):
         db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         print(f"[ERROR] Failed to save received data: {e}")
+        logging.error(f"[ERROR] Failed to save received data: {e}")
         response += "error parsing data"
 
     #response = f"saved: {len(data)}\n"
@@ -154,13 +156,20 @@ def get_status_values(data_key):
 @app.route("/data/status.json", methods=["GET"])
 def status_shift():
     shift = int(request.args.get("shift", "0"))
-    return db.get_last_statuses(shift=shift)[0]
-
+    statuses = db.get_last_statuses(shift=shift)
+    return statuses[0] if len(statuses) > 0 else {}
+ 
 @app.route("/data/wind.json", methods=["GET"])
 #@cache.cached(query_string=True)
 def wind_data():
     duration_hours = float(request.args.get("duration", "6"))
     return db.get_bucketed_data(duration_hours=duration_hours)
+
+@app.route("/data/temp.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def temperature_data():
+    duration_hours = float(request.args.get("duration", "6"))    
+    return db.get_temp(duration_hours=duration_hours)
 
 @app.route("/data/wind_all.json", methods=["GET"])
 #@cache.cached(query_string=True)
@@ -179,7 +188,9 @@ def wind_peter():
         'title': 'Sv. Peter',
         'statusData': db.get_last_status(),
         'windData': db.get_bucketed_data(duration_hours=6),
+        'tempData': db.get_temp(duration_hours=6),
     }
+    print("Sending data:", data, flush=True)
     return render_template("wind.html", **data)
 
 

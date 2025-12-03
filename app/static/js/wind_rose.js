@@ -120,7 +120,7 @@ console.log("Declared samples");
 const SPEED_BINS = [1, 2, 4, 6, 8, 10];
 // Barve za vse razrede (bins.length + 1). 7 barv.
 const COLORS = [
-  'rgb(31, 105, 193)', 
+  'rgb(69, 171, 255)', 
   'rgb(55, 176, 123)',
   'rgb(83, 222, 71)', 
   'rgb(170, 255, 58)',  

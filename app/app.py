@@ -71,7 +71,7 @@ def save_data():
     db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     return Response("saved: {}\n".format(len(data)), mimetype="text/plain")
 
-"""
+
 @app.route("/save_test/<sender_id>", methods=["GET", "POST"])
 def save_data_test_sender_id(sender_id):
     ip = request.remote_addr
@@ -101,7 +101,6 @@ def save_data_test_sender_id(sender_id):
     #response += f"sleep_hour_start:23\n"
     #response += f"sleep_hour_end:1\n"
     return Response(response, mimetype="text/plain")
-"""
 
 @app.route("/save_prefs/<sender_id>", methods=["POST"])
 def save_prefs_sender_id(sender_id):
@@ -113,19 +112,6 @@ def save_prefs_sender_id(sender_id):
     response = f"saved: {len(data)}\n"
 
     save_query_to_log("prefs_" + sender_id, data)
-
-    return Response(response, mimetype="text/plain")
-
-@app.route("/save_errors/<sender_id>", methods=["POST"])
-def save_errors_sender_id(sender_id):
-    ip = request.remote_addr
-    print(f"Got preferences save request from: {sender_id}. From ip: {ip}")
-
-    data = request.get_data(as_text=True)
-    
-    response = f"saved: {len(data)}\n"
-
-    save_query_to_log("errors_" + sender_id, data)
 
     return Response(response, mimetype="text/plain")
 
@@ -142,9 +128,6 @@ def save_data_sender_id(sender_id):
     else:
         return "unknown protocol", 500
 
-    print(f"Trying to save data: {data}")
-    logging.info(f"Trying to save data: {data}")
-
     response = f"saved: {len(data)}\n"
 
     save_query_to_log(sender_id, data)
@@ -152,40 +135,7 @@ def save_data_sender_id(sender_id):
         db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         print(f"[ERROR] Failed to save received data: {e}")
-        response += "error parsing data"
-
-    #response = f"saved: {len(data)}\n"
-    #response += f"prefs:\n"
-    #response += f"pref_version:5\n"
-    #response += f"send_error_names:1\n"
-    #response += f"sleep_hour_start:23\n"
-    #response += f"sleep_hour_end:1\n"
-    return Response(response, mimetype="text/plain")
-
-@app.route("/save_test/<sender_id>", methods=["GET", "POST"])
-def save_data_test_sender_id(sender_id):
-    ip = request.remote_addr
-    print(f"Got save request for: {sender_id}. From ip: {ip}")
-    logging.info(f"Got save request for: {sender_id}. From ip: {ip}")
-
-    if request.method == "GET":
-        data = request.query_string.decode("utf-8")
-    elif request.method == "POST":
-        data = request.get_data(as_text=True)
-    else:
-        return "unknown protocol", 500
-
-    print(f"Trying to save data: {data}")
-    logging.info(f"Trying to save data: {data}")
-
-    response = f"saved: {len(data)}\n"
-
-    save_query_to_log("test_" + sender_id, data)
-    try:
-        a = 1
-        #db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
-    except Exception as e:
-        print(f"[ERROR] Failed to save received data: {e}")
+        logging.error(f"[ERROR] Failed to save received data: {e}")
         response += "error parsing data"
 
     #response = f"saved: {len(data)}\n"
@@ -206,13 +156,20 @@ def get_status_values(data_key):
 @app.route("/data/status.json", methods=["GET"])
 def status_shift():
     shift = int(request.args.get("shift", "0"))
-    return db.get_last_statuses(shift=shift)[0]
-
+    statuses = db.get_last_statuses(shift=shift)
+    return statuses[0] if len(statuses) > 0 else {}
+ 
 @app.route("/data/wind.json", methods=["GET"])
 #@cache.cached(query_string=True)
 def wind_data():
     duration_hours = float(request.args.get("duration", "6"))
     return db.get_bucketed_data(duration_hours=duration_hours)
+
+@app.route("/data/temp.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def temperature_data():
+    duration_hours = float(request.args.get("duration", "6"))    
+    return db.get_temp(duration_hours=duration_hours)
 
 @app.route("/data/wind_all.json", methods=["GET"])
 #@cache.cached(query_string=True)
@@ -231,7 +188,9 @@ def wind_peter():
         'title': 'Sv. Peter',
         'statusData': db.get_last_status(),
         'windData': db.get_bucketed_data(duration_hours=6),
+        'tempData': db.get_temp(duration_hours=6),
     }
+    print("Sending data:", data, flush=True)
     return render_template("wind.html", **data)
 
 
@@ -275,6 +234,8 @@ def max_wind():
         strdata += f"{d['timestamp']};  {d['value']}\n"
     
     return Response(strdata, mimetype="text/plain")
+
+
 
 @app.route("/dir", methods=["GET"])
 def directions():

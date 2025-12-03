@@ -19,6 +19,7 @@
   <script src="static/js/wind_rose.js"></script>
   <script src="static/js/status_update.js"></script>
   <script src="static/js/wind.js"></script>
+  <script src="static/js/temps.js"></script>
 
   <style>
 
@@ -225,6 +226,7 @@
 <script>
   preloadedStatusData =  {{ statusData | tojson }}; 
   preloadedWindData =  {{ windData | tojson }}; 
+  preloadedTempData =  {{ tempData | tojson }}; 
 </script>
 
 <script>
@@ -371,26 +373,46 @@
 
 
 
-      <!-- Temperature chart 
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
-        <div class="flex items-center justify-between">
+      <!-- Temperature chart -->
+      <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+        <!--{{ sleep_overlay() }}-->
+
+        <div class="p-1 pb-2 flex justify-between gap-4">
           <div>
-            <h2 class="font-semibold">Temperature chart</h2>
-            <p class="text-xs text-slate-500">0° = North</p>
+            <h2 class="font-semibold text-l">Temperatura</h2>
+             <div class="text-xs text-slate-500">⚠️ Temperatura je izmerjena v ohišju, zato je višja od dejanske.</div>
           </div>
-          <div class="text-right">
-            <div class="text-2xl font-semibold">North</div>
-            <div class="text-xs text-slate-500">current</div>
+
+          <div class="flex items-end gap-4 text-right pr-1">
+
+            <div class="text-right">
+              <div class="flex items-baseline justify-end gap-1">
+                <span id="hum-value" class="text-xl font-semibold text-[#7ab87d]">--</span>
+                <span class="text-sm text-slate-500">%</span>
+              </div>
+
+              <div class="text-xs text-slate-500">vlaga</div>
+            </div>
+
+            <div class="text-right">
+              <div class="flex items-baseline justify-end gap-1">
+                <span id="temp-value" class="text-2xl font-semibold text-[#1e88e5]">--</span>
+                <span  class="text-sm text-slate-500">˚C</span>
+              </div>
+
+              <div class="text-xs text-slate-500">temp</div>
+            </div>
           </div>
         </div>
-        <div class="px-2">
-          <canvas id="temp-chart"></canvas>
+
+        <div class="temp-chart-holder chart-holder relative w-full md:h-[25rem] h-60 ">
+          {{ loading_overlay() }}
+
+          <canvas id="temp-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
       </div>
-          -->
-
-
     </section>
+
 
 
     <!-- Right column: device status + (moved) location/status/notes -->
@@ -453,16 +475,13 @@
             transparent 100%
         );
      ">
-</div>
+
+      </div>
 
         <div class="pt-4 w-auto text-center text-sm text-slate-500">
           Razpon prikazanih vrednosti od <b id="rose-data-start">--:--</b> do <b id="rose-data-end">--:--</b>
         </div>
      
-
-
-
-
         <div class="pt-2 flex justify-center items-end gap-6 text-right pr-1">
            
           <div class="flex flex-col items-center space-y-1">
@@ -503,6 +522,7 @@
           </div>
 
       </div>
+
       <!-- Device Status -->
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
         <!--{{ sleep_overlay() }}-->
@@ -529,7 +549,7 @@
 
 
   <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
-    © 2025 Paraglidng Wind Station · Made with ❤️ to 🪂
+    © 2025 Paraglidng Wind Station · Built with ❤️ for paragliding 🪂
   </footer>
 </body>
 </html>

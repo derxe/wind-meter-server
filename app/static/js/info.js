@@ -47,9 +47,24 @@ $(function() {
   $('#select-display-duration').on('change', function () {
     displayDuration = parseInt($(this).val(), 10);
     console.log("Display duration:", displayDuration);
-    showGraph();
-    showGraphY2();
+    showGraph("y1");
+    showGraph("y2");
   });
+
+  $('#select-graph-1').on('change', function () {
+    const dataKey = $(this).val();                              
+    const dataText = $(this).find('option:selected').text();   
+    
+    showNewGraph(dataKey, dataText);
+  });
+
+  $('#select-graph-2').on('change', function () {
+    const dataKey = $(this).val();                              
+    const dataText = $(this).find('option:selected').text();   
+
+    showNewGraphY2(dataKey, dataText);
+  });
+
 
   $('#status-shift-value').on('click', function () {
     statusShift = 0;
@@ -77,6 +92,8 @@ $(function() {
   loadRawLogs();
 
 });
+
+
 
 function loadRawLogs() {
   showOnlyErrors = displayLogs === "all" ? "0" : "1";
@@ -135,37 +152,9 @@ function toggleOverlay(type, show) {
 }
 
 let displayedKeys = [];
-function displayStatusInfo(dataKey, name, value, showBtnGraph=false) {
+function displayStatusInfo(dataKey, name, value) {
   displayedKeys.push(dataKey);
-  var content = "";
-  
-  if(showBtnGraph) content = `
-    <div class="flex items-center justify-between">
-      <span class="text-sm text-slate-500">${name}:</span>
-
-      <span class="flex items-center gap-1 p-1">
-        <span class="text-base text-right font-semibold text-slate-800">
-          ${value ?? "--"}
-        </span>
-        Graph:
-        <button 
-          onclick="showNewGraph('${dataKey}', '${name}')"
-          class="p-1 px-4 rounded hover:bg-slate-200"
-          title="Pokaži graf"
-        >
-          1
-        </button>
-
-        <button 
-          onclick="showNewGraphY2('${dataKey}', '${name}')"
-          class="p-1 px-4 rounded hover:bg-slate-200"
-          title="Pokaži graf"
-        >
-          2
-        </button>
-      </span>
-    </div>
-  `; else content = `
+  const content = `
     <div class="flex items-center justify-between">
       <span class="text-sm text-slate-500">${name}</span>
 
@@ -180,37 +169,29 @@ function displayStatusInfo(dataKey, name, value, showBtnGraph=false) {
 }
 
 
-function showGraph() {
-  if (currentGraph === undefined || !("dataKey" in currentGraph)) return;
+function showGraph(axis) {
+  const currGraph = axis === "y1"? currentGraph : currentGraphY2;
+  if (currGraph === undefined || !("dataKey" in currGraph)) {
+    drawGraph(undefined, undefined, axis);
+    return;
+  }
 
-  let { dataKey, dataName } = currentGraph;
-  if(dataKey == null) return; // no data to load 
+  let { dataKey, dataName } = currGraph;
   $('#chart-holder').show();
-  $('#grap-name').html(dataName);
   showLoading(true);
-  $.getJSON(`data/status/${dataKey}.json?duration=${displayDuration}`, function(data) {
+  $.ajax({
+    url: `data/status/${dataKey}.json`,
+    data: { duration: displayDuration },
+    dataType: 'json',
+    success: function (data) {
       showLoading(false);
-      console.log('Got data to display:', data);
-      drawGraph(data, dataName, "y1");
-  });
-
-  console.log("Show graphs:", currentGraph);
-}
-
-function showGraphY2() {
-  if (currentGraphY2 === undefined || !("dataKey" in currentGraphY2)) return;
-
-  let { dataKey, dataName } = currentGraphY2;
-  $('#chart-holder').show();
-  $('#grap-name-y2').html(dataName);
-  showLoading(true);
-  $.getJSON(`data/status/${dataKey}.json?duration=${displayDuration}`, function(data) {
+      drawGraph(data, dataName, axis);
+    },
+    error: function () {
       showLoading(false);
-      console.log('Got data to display:', data);
-      drawGraph(data, dataName, "y2");
+      drawGraph(undefined, undefined, axis);
+    }
   });
-
-  console.log("Show graphs:", currentGraphY2);
 }
 
 function getGraphData(dataKey, dataName) {
@@ -233,24 +214,20 @@ function getGraphData(dataKey, dataName) {
 }
 
 function showNewGraph(dataKey, dataName) {
-  currentGraph = getGraphData(dataKey, dataName);
-  showGraph();
+  currentGraph = dataKey !== ""? getGraphData(dataKey, dataName) : undefined;
+  showGraph("y1");
 }
 
 function showNewGraphY2(dataKey, dataName) {
-  currentGraphY2 = getGraphData(dataKey, dataName);
-  showGraphY2();
+  currentGraphY2 = dataKey !== ""? getGraphData(dataKey, dataName) : undefined;
+  showGraph("y2");
 }
 
 
 let chart;
 function drawGraph(data, dataName, axis) {
-  data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  const dataValues = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: parseFloat(d.value)}));
-  const ctx = document.getElementById('status-chart').getContext('2d');
-
-  console.log("dataValues:", dataValues);
   if (!chart) {
+    const ctx = document.getElementById('status-chart').getContext('2d');
     chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -280,7 +257,7 @@ function drawGraph(data, dataName, axis) {
                 showLine: false,
                 pointRadius: 2,
                 borderColor: "red", 
-                backgroundColor: "#9ad0f5",
+                backgroundColor: "red",
                 spanGaps: 1*60*60*1000, // dont draw the line if the data is more then 1 hour appart
                 hidden: axis != "y2",
             },
@@ -292,7 +269,7 @@ function drawGraph(data, dataName, axis) {
           },
           plugins: {
               legend: {
-                  display: false,
+                  display: true,
                   position: 'bottom',      
                   align: 'center',
                   labels: { usePointStyle: true, padding: 12 }
@@ -327,26 +304,44 @@ function drawGraph(data, dataName, axis) {
     });
   }
 
-  if(axis == "y1") {
-    if(currentGraph.min != null && currentGraph.max != null) {
-      chart.options.scales.y.min = currentGraph.min;
-      chart.options.scales.y.max = currentGraph.max;
-    } else {
-      chart.options.scales.y.min = undefined;
-      chart.options.scales.y.max = undefined;
+  if(data) {
+    data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const dataValues = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: parseFloat(d.value)}));
+    
+    // show the data in defined axis
+    if(axis == "y1") {
+      if(currentGraph.min != null && currentGraph.max != null) {
+        chart.options.scales.y.min = currentGraph.min;
+        chart.options.scales.y.max = currentGraph.max;
+      } else {
+        chart.options.scales.y.min = undefined;
+        chart.options.scales.y.max = undefined;
+      }
+      chart.data.datasets[0].data = dataValues;
+      chart.data.datasets[0].label = dataName;
+      chart.data.datasets[0].hidden = false;
+    } else if(axis == "y2") {
+      if(currentGraphY2.min != null && currentGraphY2.max != null) {
+        chart.options.scales.y2.min = currentGraphY2.min;
+        chart.options.scales.y2.max = currentGraphY2.max;
+      } else {
+        chart.options.scales.y2.min = undefined;
+        chart.options.scales.y2.max = undefined;
+      }
+      chart.data.datasets[1].data = dataValues;
+      chart.data.datasets[1].label = dataName;
+      chart.data.datasets[1].hidden = false;
     }
-    chart.data.datasets[0].data = dataValues;
-    chart.data.datasets[0].hidden = false;
-  } else if(axis == "y2") {
-    if(currentGraphY2.min != null && currentGraphY2.max != null) {
-      chart.options.scales.y2.min = currentGraphY2.min;
-      chart.options.scales.y2.max = currentGraphY2.max;
-    } else {
-      chart.options.scales.y2.min = undefined;
-      chart.options.scales.y2.max = undefined;
+
+  } else {
+    // no data to draw 
+    if(axis == "y1") {
+      chart.data.datasets[0].hidden = true;
+      chart.data.datasets[0].data = [];
+    } else if(axis == "y2") {
+      chart.data.datasets[1].data = [];
+      chart.data.datasets[1].hidden = true;
     }
-    chart.data.datasets[1].data = dataValues;
-    chart.data.datasets[1].hidden = false;
   }
 
   chart.update();  
@@ -403,6 +398,17 @@ function formatErrors(errors) {
   return errorsList;
 }
 
+function addToDropdown(dataKey, dataName) {
+  $('#select-graph-1').append($('<option>', {
+    value: dataKey,
+    text: dataName
+  }));
+  $('#select-graph-2').append($('<option>', {
+    value: dataKey,
+    text: dataName
+  }));
+}
+
 function setStatuionParametersPannel(data) {
   const signal = csqToSignalAuto(data["signal"])
   const signalQualityStr = `${signal.quality}, ${signal.dbm} dB`;
@@ -410,18 +416,30 @@ function setStatuionParametersPannel(data) {
   displayedKeys = [];
   displayStatusInfo("timestamp", "Čas meritve", `${formattedDate(data["timestamp"])}<br>(pred ${timeSince(data["timestamp"])})`);
   displayStatusInfo("phoneNum", "Telefonska", data["phoneNum"] ?? "--");
-  displayStatusInfo("vbatIde", "Baterija", (data["vbatIde"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("vbat_rate1", "Charging rate", (data["vbat_rate1"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("vbat_rate2", "charging rate2", (data["vbat_rate2"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("vbatGprs", "Baterija med GPRS", (data["vbatGprs"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("vsol", "Solar:", (data["vsol"] ?? "--") + " V", showBtnGraph=true);
-  displayStatusInfo("signal", "Signal:", signalQualityStr, showBtnGraph=true);
-  displayStatusInfo("regDur", "Trajanje registracije", (data["regDur"] ?? "--") + " s", showBtnGraph=true);
-  displayStatusInfo("gprsRegDur", "Trajanje GPRS registracije", (data["gprsRegDur"] ?? "--") + " s", showBtnGraph=true);
-  displayStatusInfo("dur", "Trajanje skupaj", (data["dur"] ?? "--") + " s", showBtnGraph=true);
+  displayStatusInfo("vbatIde", "Baterija", (data["vbatIde"] ?? "--") + " V");
+  displayStatusInfo("vbat_rate1", "Charging rate", (data["vbat_rate1"] ?? "--") + " V");
+  displayStatusInfo("vbat_rate2", "charging rate2", (data["vbat_rate2"] ?? "--") + " V");
+  displayStatusInfo("vbatGprs", "Baterija med GPRS", (data["vbatGprs"] ?? "--") + " V");
+  displayStatusInfo("vsol", "Solar:", (data["vsol"] ?? "--") + " V");
+  displayStatusInfo("signal", "Signal:", signalQualityStr);
+  displayStatusInfo("regDur", "Trajanje registracije", (data["regDur"] ?? "--") + " s");
+  displayStatusInfo("gprsRegDur", "Trajanje GPRS registracije", (data["gprsRegDur"] ?? "--") + " s");
+  displayStatusInfo("dur", "Trajanje skupaj", (data["dur"] ?? "--") + " s");
   displayStatusInfo("ver", "FW version", data["ver"]);
-
   displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
+
+  addToDropdown("vbatIde", "baterija");
+  addToDropdown("vbat_rate1", "Charging rate 1");
+  addToDropdown("vbat_rate2", "Charging rate 2");
+  addToDropdown("vbatGprs", "baterija med GPRS");
+  addToDropdown("vsol", "V solarna");
+  addToDropdown("signal", "signal");
+  addToDropdown("regDur", "trajanje registracije");
+  addToDropdown("gprsRegDur", "trajanje GPRS");
+  addToDropdown("dur", "trajanje skupaj");
+  addToDropdown("hum", "vlažnost");
+  addToDropdown("temp", "temperatura");
+  
 
   for (const [key, value] of Object.entries(data)) {
     if (displayedKeys.includes(key)) continue;
@@ -441,6 +459,7 @@ function setStatuionParametersPannel(data) {
   displayStatusBar("Napetost solarne", `${vSolar} V`, vSolarProc, solarBarColor)
   //displayStatusBar("Temepratura", `12 ˚C`, "40", "#38bdf8")
 
+  
   const vbatRate = data["vbat_rate1"];
   const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
   const vbatRateProc = vbatRate / 100 * 100;

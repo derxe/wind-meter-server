@@ -57,6 +57,7 @@ function formattedTime(isoString) {
 }
 
 function isDeviceSleeping() {
+  return false;
   const now = new Date();
   const hour = now.getHours();
   // Sleeping between 20:00 and 06:00 
@@ -65,7 +66,6 @@ function isDeviceSleeping() {
 
 function updateStatusPannel(data) {
   let timeSinceLastSend = timeSinceMinutes(data["timestamp"]);
-  timeSinceLastSend = 1;
   const timeSinceStr = timeSince(data["timestamp"]);
   const time = formattedTime(data["timestamp"]);
 
@@ -111,22 +111,20 @@ function setStatuionParametersPannel(data) {
   const signal = csqToSignalAuto(data["signal"])
   const signalQualityStr = `${signal.quality}, ${signal.dbm} dB`;
 
-  displayStatusInfo("Čas meritve:", `${formattedDate(data["timestamp"])}<br>(pred ${timeSince(data["timestamp"])})`);
-  displayStatusInfo("Telefonska:", data["phoneNum"]??"--");
+  displayStatusInfo("Čas meritve:", `${formattedDate(data["timestamp"])}`);
+  displayStatusInfo("Zadnjič:", `pred ${timeSince(data["timestamp"])}`);
   displayStatusInfo("Baterija:", (data["vbatIde"]??"--") + " V");
-  displayStatusInfo("Baterija med GPRS:", (data["vbatIde"]??"--") + " V");
   displayStatusInfo("Solar:", (data["vsol"]??"--") + " V");
   displayStatusInfo("Signal:", signalQualityStr);
-  displayStatusInfo("Trajanje registracije:", (data["regDur"]??"--") + "s");
-  displayStatusInfo("Trajanje GPRS registracije:", (data["gprsRegDur"]??"--") + "s");
-  displayStatusInfo("Trajanje skupaj:", (data["dur"]??"--") + "s");
+  displayStatusInfo("Trajanje pošiljanja:", (data["dur"]??"--") + "s");
   displayStatusInfo("FW version:", data["ver"]);
+  displayStatusInfo("Telefonska:", data["phoneNum"]??"--");
 
   const battProc = batteryVoltageToProcentage(data["vbatIde"]);
   const battBarColor = batteryColorHex(battProc);
   displayStatusBar("Baterija", `${battProc}%`, battProc, battBarColor)
 
-  const vSolar = data["vsol"];
+  const vSolar = (data["vsol"]*1.0).toFixed(1);
   const vSolarProc = vSolar / 8 * 100;
   const solarBarColor = signalColorHex(vSolarProc)
   displayStatusBar("Napetost solarne", `${vSolar} V`, vSolarProc, solarBarColor)
@@ -135,11 +133,11 @@ function setStatuionParametersPannel(data) {
   const signalBarColor = signalColorHex(signal.percent);
   displayStatusBar("Signal", signalQualityStr, signal.percent, signalBarColor)
 
-  const vbatRate = data["vbat_rate1"];
-  const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
-  const vbatRateProc = vbatRate / 100 * 100;
-  const vbatRateColor = batteryRateColorHex(vbatRateProc)
-  displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
+  //const vbatRate = data["vbat_rate1"];
+  //const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
+  //const vbatRateProc = vbatRate / 100 * 100;
+  //const vbatRateColor = batteryRateColorHex(vbatRateProc)
+  //displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
 }
 
 function batteryRateColorHex(percent) {

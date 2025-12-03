@@ -31,6 +31,9 @@ db = client["weather_station_v2"]
 # wind speed conversion between RPMs measured to m/s 
 SPEED_RPM_TO_MS = 0.33/3.6
 
+DIR_ADJUSTMENT = -15 # for how many degrees do we adjust the measurement 
+
+
 def save_status_update(data):
     if not data:
         print("No data to save")
@@ -208,6 +211,8 @@ def parse_status_update(line, base_ts):
     data.pop("logLast", None)
     data.pop("len", None)
 
+    dirs = [(d+DIR_ADJUSTMENT) % 360 for d in dirs]
+
     #pprint.pprint(timestamps)
     
     winds_data = {
@@ -267,7 +272,7 @@ def save_recived_data(line, timestamp):
         logging.warning(f"No data found in line: {line}")
         return
     
-    logging.info(f"Saving status update at {timestamp} with data: {data} and winds data: {winds_data}")
+    logging.info(f"Saving status update at {timestamp} with data: {data} and winds data len: {len(winds_data)}")
 
     save_status_update(data)
 
@@ -382,7 +387,15 @@ def get_status_values(data_key_name, duration_hours=6):
         }
 
     cursor = db.statuses.find(
-        {"timestamp": {"$gte": start_time}}, {"_id": 0, "timestamp": 1, data_key_name: 1}
+        {
+            "timestamp": {"$gte": start_time},
+            data_key_name: {"$exists": True}
+        },
+        {
+            "_id": 0,
+            "timestamp": 1,
+            data_key_name: 1
+        }
     ).sort("timestamp", -1)
 
     status_values = []
@@ -400,7 +413,7 @@ def get_last_status():
         {"_id": 0}
     ).sort("timestamp", -1).limit(1)
 
-    latest_status = cursor.next() if cursor.alive else None
+    latest_status = next(cursor, None)
 
     if latest_status:
         latest_status['timestamp'] = latest_status['timestamp'].astimezone(TZ).isoformat()
@@ -408,8 +421,6 @@ def get_last_status():
     else:
         logging.warning("Unable to get last status from the DB.")
         return None
-
-    return data
 
 
 def get_last_statuses(n=1, shift=0):
@@ -493,6 +504,39 @@ def get_directions(duration_hours=6):
         data.append(doc)
 
     return data
+
+def get_temp(duration_hours=6):
+    logging.info(f"Fetching temerature and humidity data from the lsat {duration_hours} hours")
+    
+    cursor = db.statuses.find({},{"_id": 0}).sort("timestamp", -1).limit(1)
+    last_status = next(cursor, None)
+    if last_status is None:
+        return []
+
+    start_time = last_status["timestamp"] - timedelta(hours=duration_hours)
+    temp_hum_data = list(db.statuses.find(
+        {"timestamp": {"$gte": start_time}}, 
+        {"_id":0, "temp":1, "hum":1, "timestamp":1}
+        ).sort("timestamp", 1))
+    
+    if len(temp_hum_data) == 0:
+        return []
+    
+    filtered_data = []
+    for d in temp_hum_data:
+        temp = d.get("temp", "nan")
+        temp = float(temp) if temp != "nan" else None
+
+        hum = d.get("hum", "nan")
+        hum = int(hum) if hum != "nan" else None
+
+        filtered_data.append({
+            "timestamp": d["timestamp"].astimezone(TZ).isoformat(),
+            "temp": temp,
+            "hum": hum,
+        })
+    
+    return filtered_data
 
 
 def get_bucketed_data(duration_hours=6):
@@ -788,28 +832,36 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
     # last_bucket_filed_x is the most largest key that was in a bucket that wasnt fully filled 
     return out, last_bucket_filed_x
 
-
+"""
+    db.statuses.delete_many({})
+    db.winds.delete_many({})
+    db.dirs.delete_many({})
+"""
 
 
 if __name__ == "__main__":
    
-    """
-    db.statuses.delete_many({})
-    db.winds.delete_many({})
-    db.dirs.delete_many({})
-    with open("logs/293400130492916.txt", "r") as f:
-        for line in f:
-            parse_saved_line(line.strip())
-            print(".", end="", flush=True)
-    """
+    #db.statuses.delete_many({})
+    #db.winds.delete_many({})
+    #db.dirs.delete_many({})
 
 
-    start_time = datetime.now(TZ) - timedelta(hours=24*4)
+    #with open("logs/asd.txt", "r") as f:
+    #    for line in f:
+    #        parse_saved_line(line.strip())
+    #        print(".", end="", flush=True)
+   
+
+ 
+    start_time = datetime.now(TZ) - timedelta(hours=4)
     statuses = list(db.statuses.find(
         {"timestamp": {"$gte": start_time}}, 
-        {}
-        ).sort("timestamp", 1))[10:]
-    
+        {"_id":0, "temp":1, "hum":1, "timestamp":1}
+        ).sort("timestamp", 1))
+
+    pprint.pprint(list(statuses))
+    """
+    """ 
     """
     timestamps = [x["timestamp"] for x in statuses]
     values = [float(x["vbatIde"]) for x in statuses]
@@ -828,7 +880,8 @@ if __name__ == "__main__":
     #print(timestamps)
     print(len(values))
 
-    """
+    
+    
     ops = []
     for doc in statuses:
         parse_error_values(doc)
@@ -847,10 +900,9 @@ if __name__ == "__main__":
         )
 
     if ops:
-        pprint.pprint(ops)
-        #db.statuses.bulk_write(ops, ordered=False)
-    
-        
+        #pprint.pprint(ops)
+        db.statuses.bulk_write(ops, ordered=False)
+     """   
     """
     for status in statuses:
         parse_error_values(status)
@@ -879,9 +931,10 @@ if __name__ == "__main__":
     #db.dir_bucketed.delete_many({})
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "wind")
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "dir")
+
     #create_average_wind_values()
     #create_average_dir_values()
-
+    
     #cursor = db.dir_bucketed.find({}, {}).sort("timestamp", 1)
 
     #for doc in cursor:

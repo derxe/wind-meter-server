@@ -57,6 +57,7 @@ function formattedTime(isoString) {
 }
 
 function isDeviceSleeping() {
+  return false;
   const now = new Date();
   const hour = now.getHours();
   // Sleeping between 20:00 and 06:00 
@@ -65,7 +66,6 @@ function isDeviceSleeping() {
 
 function updateStatusPannel(data) {
   let timeSinceLastSend = timeSinceMinutes(data["timestamp"]);
-  timeSinceLastSend = 1;
   const timeSinceStr = timeSince(data["timestamp"]);
   const time = formattedTime(data["timestamp"]);
 
@@ -124,7 +124,7 @@ function setStatuionParametersPannel(data) {
   const battBarColor = batteryColorHex(battProc);
   displayStatusBar("Baterija", `${battProc}%`, battProc, battBarColor)
 
-  const vSolar = data["vsol"];
+  const vSolar = (data["vsol"]*1.0).toFixed(1);
   const vSolarProc = vSolar / 8 * 100;
   const solarBarColor = signalColorHex(vSolarProc)
   displayStatusBar("Napetost solarne", `${vSolar} V`, vSolarProc, solarBarColor)
@@ -133,11 +133,11 @@ function setStatuionParametersPannel(data) {
   const signalBarColor = signalColorHex(signal.percent);
   displayStatusBar("Signal", signalQualityStr, signal.percent, signalBarColor)
 
-  const vbatRate = data["vbat_rate1"];
-  const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
-  const vbatRateProc = vbatRate / 100 * 100;
-  const vbatRateColor = batteryRateColorHex(vbatRateProc)
-  displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
+  //const vbatRate = data["vbat_rate1"];
+  //const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
+  //const vbatRateProc = vbatRate / 100 * 100;
+  //const vbatRateColor = batteryRateColorHex(vbatRateProc)
+  //displayStatusBar(vbatRateLabel, `${vbatRate} mV/h`, vbatRateProc, vbatRateColor)
 }
 
 function batteryRateColorHex(percent) {

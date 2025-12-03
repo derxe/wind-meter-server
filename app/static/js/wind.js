@@ -22,8 +22,10 @@ $(function() {
       updateMaxAvgUnit();
     })
 
-    $("#double-click-show-detailed").on("dblclick", function() {
-        toggleDetailedDisplay();
+    $("#double-click-show-detailed").on("dblclick", function () {
+      toggleDetailedDisplay();
+
+      $(this).css("color", detailedShown? "green" : "");
     });
 });
 
@@ -191,11 +193,6 @@ function updateGraphUnit() {
 
 
 
-
-function subtractHours(ms, hours) {
-  return ms - hours * 60 * 60 * 1000;
-}
-
 let windChart;
 let lastAvgValue;
 let lastMaxValue;
@@ -270,9 +267,6 @@ function updateWindGraph(data) {
           plugins: {
               legend: {
                   display: false,
-                  position: 'bottom',      
-                  align: 'center',
-                  labels: { usePointStyle: true, padding: 12 }
               }
           },
           responsive: true,

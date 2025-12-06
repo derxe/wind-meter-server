@@ -26,7 +26,8 @@ let all_wind_data;
 
 function loadWindRoseData() {
   showWindRoseDataLoading(true);
-  $.getJSON(`data/wind_all.json?duration=12`, function(data) {
+  const base = window.location.pathname;
+  $.getJSON(`${base}/data/wind_all.json?duration=12`, function(data) {
       console.log('All wind data loaded:', data);
       all_wind_data = data;
       renderWindRose(data);

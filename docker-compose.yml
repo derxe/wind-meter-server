@@ -65,6 +65,7 @@ services:
     build: ./app
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
+      - DB_CLIENT_NAME=weather_station_v2
     volumes:
       - ./app:/app:rw
     # No public ports; only Nginx talks to Flask
@@ -76,6 +77,7 @@ services:
     build: ./app_dev
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
+      - DB_CLIENT_NAME=weather_station_dev_v2
     volumes:
       - ./app_dev:/app:rw
     # No public ports; only Nginx talks to Flask

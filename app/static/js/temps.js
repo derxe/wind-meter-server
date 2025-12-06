@@ -127,7 +127,6 @@ function updateTempGraph(data) {
           type: 'linear',
           position: 'left',
           beginAtZero: true,
-          suggestedMax: 10,
         },
 
         // Humidity axis (RIGHT)

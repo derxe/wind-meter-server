@@ -26,7 +26,8 @@ let all_wind_data;
 
 function loadWindRoseData() {
   showWindRoseDataLoading(true);
-  $.getJSON(`data/wind_all.json?duration=12`, function(data) {
+  const base = window.location.pathname;
+  $.getJSON(`${base}/data/wind_all.json?duration=12`, function(data) {
       console.log('All wind data loaded:', data);
       all_wind_data = data;
       renderWindRose(data);
@@ -120,7 +121,7 @@ console.log("Declared samples");
 const SPEED_BINS = [1, 2, 4, 6, 8, 10];
 // Barve za vse razrede (bins.length + 1). 7 barv.
 const COLORS = [
-  'rgb(69, 171, 255)', 
+  'rgb(31, 105, 193)', 
   'rgb(55, 176, 123)',
   'rgb(83, 222, 71)', 
   'rgb(170, 255, 58)',  
@@ -128,7 +129,6 @@ const COLORS = [
   'rgb(255, 176, 58)', 
   'rgb(249, 37, 37)'
 ];
-
 
 
 // ----------------- Pomožne funkcije -----------------

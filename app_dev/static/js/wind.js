@@ -125,7 +125,8 @@ function showLoading(isLoading) {
 
 function loadWindData() {
     showLoading(true);
-    $.getJSON(`data/wind.json?duration=${displayDuration}`, function(data) {
+    const base = window.location.pathname;
+    $.getJSON(`${base}/data/wind.json?duration=${displayDuration}`, function(data) {
         showLoading(false);
 
         console.log('Wind data loaded:', data);

@@ -127,7 +127,13 @@ function loadStatus() {
   $('#loading-status-msg').show();
 
   n = 1;
-  $.getJSON(`../data/status.json?shift=${statusShift};n=${n}`, function(data) {
+  const basePath = window.location.pathname
+    .split('/')
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('/');
+
+  $.getJSON(`/${basePath}/data/status.json?shift=${statusShift};n=${n}`, function(data) {
     console.log(data)
     displayStatusData(data);
   });
@@ -418,7 +424,6 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("phoneNum", "Telefonska", data["phoneNum"] ?? "--");
   displayStatusInfo("vbatIde", "Baterija", (data["vbatIde"] ?? "--") + " V");
   displayStatusInfo("vbat_rate1", "Charging rate", (data["vbat_rate1"] ?? "--") + " V");
-  displayStatusInfo("vbat_rate2", "charging rate2", (data["vbat_rate2"] ?? "--") + " V");
   displayStatusInfo("vbatGprs", "Baterija med GPRS", (data["vbatGprs"] ?? "--") + " V");
   displayStatusInfo("vsol", "Solar:", (data["vsol"] ?? "--") + " V");
   displayStatusInfo("signal", "Signal:", signalQualityStr);
@@ -429,8 +434,7 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
 
   addToDropdown("vbatIde", "baterija");
-  addToDropdown("vbat_rate1", "Charging rate 1");
-  addToDropdown("vbat_rate2", "Charging rate 2");
+  addToDropdown("vbat_rate", "Charging rate");
   addToDropdown("vbatGprs", "baterija med GPRS");
   addToDropdown("vsol", "V solarna");
   addToDropdown("signal", "signal");
@@ -460,7 +464,7 @@ function setStatuionParametersPannel(data) {
   //displayStatusBar("Temepratura", `12 ˚C`, "40", "#38bdf8")
 
   
-  const vbatRate = data["vbat_rate1"];
+  const vbatRate = data["vbat_rate"];
   const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
   const vbatRateProc = vbatRate / 100 * 100;
   const vbatRateColor = batteryRateColorHex(vbatRateProc)

@@ -41,7 +41,7 @@ DIR_ADJUSTMENT = -15 # for how many degrees do we adjust the measurement
 
 
 def get_stations():
-    return list(db.stations.find({},{}))
+    return list(db.stations.find({},{"_id": 0}))
 
 def get_station_with_imsi(imsi: str):
     if not imsi:
@@ -68,6 +68,79 @@ def add_station(station: dict):
         upsert=True                 # insert if not found
     )
 
+ERROR_CODE_MAP_V4 = {
+    e["code"]: e["code_name"]
+    for e in [
+        # No error
+        { "code": 0,  "code_name": "ERR_NONE" },
+
+        # Send / modem errors
+        { "code": 1,  "code_name": "ERR_SEND_AT_FAIL" },
+        { "code": 2,  "code_name": "ERR_SEND_NO_SIM" },
+        { "code": 3,  "code_name": "ERR_SEND_CSQ_FAIL" },
+        { "code": 4,  "code_name": "ERR_SEND_REG_FAIL" },
+        { "code": 5,  "code_name": "ERR_SEND_CIMI_FAIL" },
+        { "code": 6,  "code_name": "ERR_SEND_GPRS_FAIL" },
+        { "code": 7,  "code_name": "ERR_SEND_HTTP_FAIL_DATA" },
+        { "code": 8,  "code_name": "ERR_SEND_HTTP_FAIL_PREFS" },
+        { "code": 9,  "code_name": "ERR_SEND_REPEAT" },
+
+        # Wind / sensor / buffer errors
+        { "code": 20, "code_name": "ERR_DIR_READ" },
+        { "code": 21, "code_name": "ERR_DIR_READ_ONCE" },
+        { "code": 22, "code_name": "ERR_WIND_BUF_OVERWRITE" },
+        { "code": 23, "code_name": "ERR_WIND_SHORT_BUF_FULL" },
+        { "code": 24, "code_name": "ERR_SPEED_SHORT_BUF_FULL" },
+        { "code": 25, "code_name": "ERR_DIR_SHORT_BUF_FULL" },
+        { "code": 26, "code_name": "ERR_TEMP_READ" },
+
+        # Power / reset related (info + errors)
+        { "code": 31, "code_name": "ERR_POWERON_RESET" },
+        { "code": 32, "code_name": "ERR_BROWNOUT_RESET" },
+        { "code": 33, "code_name": "ERR_PANIC_RESET" },
+        { "code": 34, "code_name": "ERR_WDT_RESET" },
+        { "code": 35, "code_name": "ERR_SDIO_RESET" },
+        { "code": 36, "code_name": "ERR_USB_RESET" },
+        { "code": 37, "code_name": "ERR_JTAG_RESET" },
+        { "code": 38, "code_name": "ERR_EFUSE_RESET" },
+        { "code": 39, "code_name": "ERR_PWR_GLITCH_RESET" },
+        { "code": 40, "code_name": "ERR_CPU_LOCKUP_RESET" },
+        { "code": 41, "code_name": "ERR_UNEXPECTED_RESET" },
+    ]
+}
+
+
+def get_latest_error_codes(station_name):
+    return ERROR_CODE_MAP_V4
+
+
+
+def get_errors(station_name, duration_hours=12):
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+    stats = list(db.statuses.find(
+        {
+            "timestamp": {"$gte": start_time},
+            "station_name": {"$eq": station_name},
+        }, 
+        { "_id":0, "timestamp":1, "errors":1 }
+        ).sort("timestamp", 1))
+    
+    errors = []
+    prev_timestamps = None
+    for stat in stats:
+        if prev_timestamps is not None:
+            dur_minutes = (stat["timestamp"]-prev_timestamps).total_seconds() / 60
+
+            if "errors" in stat and stat["errors"] != "":
+                errors.append({
+                    "dur_minutes": round(dur_minutes, 2),
+                    "parsed_errors": parse_errors_str(stat["errors"]),
+                    "timestamp": stat["timestamp"],
+                })
+
+        prev_timestamps = stat["timestamp"]
+
+    return errors
 
 base_timestamp = None
 
@@ -352,7 +425,7 @@ def calc_vbat_change_rate(data):
     start_time = data["timestamp"] - timedelta(minutes=WINDOW_MINUTES)
     end_time = data["timestamp"]
     statuses = list(db.statuses.find(
-        {"timestamp": {"$gte": start_time, "$lt": end_time}},
+        {"timestamp": {"$gte": start_time, "$lt": end_time}, "station_name": {"$eq": station_name}},
         {}
         ).sort("timestamp", 1))
     
@@ -613,12 +686,12 @@ def get_bucketed_data(station_name, duration_hours=6):
 
     # --- fetch data ---
     winds = list(db.wind_bucketed.find(
-        {"timestamp": {"$gte": start_time}},
+        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}},
         {"_id": 0}
     ).sort("timestamp", -1))
 
     dirs = list(db.dir_bucketed.find(
-        {"timestamp": {"$gte": start_time}},
+        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}},
         {"_id": 0}
     ).sort("timestamp", -1))
 
@@ -1023,6 +1096,29 @@ def append_vbat_chane_rate():
         #db.statuses.bulk_write(ops, ordered=False)
 
 
+def parse_errors_str(errors_str):
+    errors = []
+    for pair in errors_str.split(","):
+        if ":" not in pair:
+            continue
+
+        num_str, count_str = pair.split(":", 1)
+
+        try:
+            code = int(num_str)
+            count = int(count_str)
+        except ValueError:
+            continue
+
+        err = {}
+        err["code"] = code
+        err["count"] = count
+
+        err["name"] = ERROR_CODE_MAP_V4.get(code, "UNKNOWN")
+        errors.append(err)
+
+    return errors
+
 
 if __name__ == "__main__":
    
@@ -1113,6 +1209,7 @@ if __name__ == "__main__":
 
     #add_station_name_to_status()
 
+    """
     test_run = False
     station_name = "peter"
     add_station_name_to_collection("winds", station_name, test_run=test_run)
@@ -1120,14 +1217,42 @@ if __name__ == "__main__":
     add_station_name_to_collection("wind_bucketed",  station_name, test_run=test_run)
     add_station_name_to_collection("dir_bucketed",  station_name, test_run=test_run)
     add_station_name_to_collection("statuses",  station_name, test_run=test_run)
-
+    """
     #start_time = datetime.now(TZ) - timedelta(days=2)
     #data = list(db["winds"].find(
     #    {"timestamp": {"$gte": start_time}}, 
     #    {} # "_id":0, "temp":1, "hum":1, "timestamp":1
     #    ).sort("timestamp", 1))
     #pprint.pprint(data)
+
+    station_name = "peter"
+    start_time = datetime.now(TZ) - timedelta(days=1)
+    stats = list(db.statuses.find(
+        {
+            "timestamp": {"$gte": start_time},
+        }, 
+        { "_id":0 }
+        ).sort("timestamp", 1))
     
+    delayed_errors = []
+    prev_timestamps = None
+    for stat in stats:
+        if prev_timestamps is not None:
+            dur_minutes = (stat["timestamp"]-prev_timestamps).total_seconds() / 60
+            
+            if dur_minutes > 12:
+                delayed_errors.append({
+                    "errors_parsed": parse_errors_str(stat["errors"]),
+                    "duration": dur_minutes
+                })
+               
+
+        prev_timestamps = stat["timestamp"]
+
+    print("All errors:")
+    pprint.pprint(delayed_errors)
+    
+    print("Devices: ", get_stations())
     print("Number of statuses:", db.statuses.count_documents({}))
     print("Number of winds:", db.winds.count_documents({}))
     print("Number of dirs:", db.dirs.count_documents({}))
@@ -1137,5 +1262,6 @@ if __name__ == "__main__":
 
     #print("Parsed Status Update:")
     #print(json.dumps(parse_status_update(line), indent=2))
+
 
 

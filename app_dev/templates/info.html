@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=0.85, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.5" />
   <title>Sv. Peter: veterna postaja</title>
   <!-- Tailwind via CDN (no app JS) -->
   <!-- <script src="https://cdn.tailwindcss.com"></script>
@@ -21,6 +21,7 @@
 
 <script>
   preloadedStatusData =  {{ statusData | tojson }}; 
+  stationData =  {{ station | tojson }}; 
 </script>
 
 <body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> 
@@ -145,6 +146,9 @@
             class="shrink mt-2 w-full max-w-full p-3 rounded-lg bg-slate-100
                     text-sm font-mono whitespace-pre-wrap break-all">
           <div class="part of log class"> part of log</div>
+        </div>
+
+        <div id="errors-value" class="">
         </div>
 
       </div>

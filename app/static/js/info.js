@@ -1,4 +1,10 @@
 
+const basePath = window.location.pathname
+  .split('/')
+  .filter(Boolean)
+  .slice(0, 2)
+  .join('/');
+
 function showLoading(isLoading) {
   if(isLoading) {
     $('#status-chart').hide();
@@ -96,11 +102,53 @@ $(function() {
 
 
 function loadRawLogs() {
-  showOnlyErrors = displayLogs === "all" ? "0" : "1";
-  $.get(`https://to-ni.dev/veter/log/293400130492916.txt?errors=${showOnlyErrors}`, function (text) {
+  if(displayLogs === "all") {
+    $.get(`https://to-ni.dev/veter/log/${stationData.imsi}.txt`, function (text) {
       displayRawLogs(text);
+    });
+  } else {
+
+    $.getJSON(`/${basePath}/data/errors.json`, function(data) {
+      displayErrors(data);
+    });
+  }
+}
+
+function displayErrors(data) {
+  $("#logs-value").empty().hide();
+  const container = $("#errors-value");
+  container.empty().show();
+
+  console.log("Showing data", data);
+
+  data.forEach(entry => {
+    const time = new Date(entry.timestamp).toLocaleString();
+    const durationMinutes = typeof entry.dur_minutes === "number" ? entry.dur_minutes.toFixed(1) : "--";
+    const LONG_DURATION_CUTOF = 11; // 11 minutes cutoff for 
+    const isLongDuration = typeof entry.dur_minutes === "number" && entry.dur_minutes > 11;
+
+    const errorItems = entry.parsed_errors
+      .map(err => `
+        <span class="inline-block mr-3 px-2 py-0.5 rounded bg-slate-200 text-xs">
+          <b>${err.name}</b> × ${err.count}
+        </span>
+      `)
+      .join("");
+
+    const html = `
+      <div class="mb-2 px-3 py-2 rounded text-sm ${isLongDuration ? "bg-red-100 border border-red-300 text-red-900" : "bg-slate-100/70"}">
+        <div class="text-xs mb-1 flex items-center justify-between ${isLongDuration ? "text-red-700" : "text-slate-500"}">
+          <span>${time}</span>
+          <span class="font-semibold">${durationMinutes} min</span>
+        </div>
+        <div class="flex flex-wrap gap-2">${errorItems}</div>
+      </div>
+    `;
+
+    container.prepend(html);
   });
 }
+
 
 function rawLogClicked(i) {
   statusShift = i;
@@ -109,8 +157,9 @@ function rawLogClicked(i) {
 }
 
 function displayRawLogs(rawLogsText) {
+  $("#errors-value").empty().hide();
   const container = $("#logs-value");
-  container.empty(); // clear previous content
+  container.empty().show(); // clear previous content
 
   // Split by newline into individual lines
   const lines = rawLogsText.split("\n").filter(line => line.trim().length > 0); 
@@ -127,12 +176,6 @@ function loadStatus() {
   $('#loading-status-msg').show();
 
   n = 1;
-  const basePath = window.location.pathname
-    .split('/')
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('/');
-
   $.getJSON(`/${basePath}/data/status.json?shift=${statusShift};n=${n}`, function(data) {
     console.log(data)
     displayStatusData(data);
@@ -386,8 +429,10 @@ const ErrorCodeStrings = [
   { code: 22, code_name: "ERR_EFUSE_RESET",        desc: "EFUSE error reset" },
   { code: 23, code_name: "ERR_PWR_GLITCH_RESET",   desc: "Power glitch reset" },
   { code: 24, code_name: "ERR_CPU_LOCKUP_RESET",   desc: "CPU lockup/double exception reset" },
-  { code: 25, code_name: "ERR_UNEXPECTED_RESET",   desc: "Unexpected/unclassified reset" },
+  { code: 25, code_name: "ERR_UNEXPECTED_RESETaaa",   desc: "Unexpected/unclassified reset" },
 ];
+
+
 
 function errorNumToStr(errorNum) {
   const item = ErrorCodeStrings[errorNum];

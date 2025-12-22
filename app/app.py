@@ -54,6 +54,50 @@ def redirect_request_to_dev(sender_id, data):
     except Exception as e:
         logging.error(f"Forwarding failed: {e}")
 
+@app.route("/")
+def list_stations():
+    #data = {
+    #    'stations': db.get_stations(),
+    #    'last_status': db.get_last_status("peter"),
+    #}
+    data = {
+        "stations": [
+            {"name": "peter", "active": True,  "full_name": "Sv. Peter",   "imsi": "293400130492916"},
+            {"name": "test",  "active": False, "full_name": "zg lipnica",  "imsi": "293400130750155"},
+        ],
+        "last_status": {
+            "timestamp": "...",
+            "pref": "...",
+            "prefDate": "...",
+            "ver": "v3",
+            "imsi": "293400130492916",
+            "phoneNum": "...",
+            "temp": "1.4",
+            "hum": "89",
+            "vbatIde": "4.006",
+            "vbatGprs": "3.983",
+            "vsol": "0.022",
+            "dur": "12.3",
+            "signal": "31",
+            "regDur": "1.7",
+            "gprsRegDur": "1.1",
+            "errors": "2:4,9:2",
+            "vbat_rate": -0.15,
+            "station_name": "peter"
+        },
+        "last_wind": {
+            "avg": 0.03,
+            "dir": 1,
+            "max": 0.46,
+            "temp": 12,
+            "hum": 70,
+            "timestamp": "2025-12-06T23:30:00+01:00"
+        }
+    }
+    
+    logging.info(f"Data to send: {data}")
+    return render_template("station_list.html", data=data)
+
 @app.route("/save/<sender_id>", methods=["GET", "POST"])
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
@@ -73,7 +117,8 @@ def save_data_sender_id(sender_id):
 
     file_logs.save_query_to_log(sender_id, data)
     try:
-        db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+        if sender_id == "293400130492916":
+            db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         #logging.error(f"[ERROR] Failed to save received data: {e}", e)
         logging.exception("Failed to save received data")
@@ -86,6 +131,13 @@ def save_data_sender_id(sender_id):
     #response += f"sleep_hour_start:23\n"
     #response += f"sleep_hour_end:1\n"
     return Response(response, mimetype="text/plain")
+
+
+@app.route("/<station_name>/data/errors.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def get_error_values(station_name):
+    duration_hours = float(request.args.get("duration", "24"))
+    return db.get_errors(station_name, duration_hours=duration_hours)
 
 
 @app.route("/<station_name>/data/status/<data_key>.json", methods=["GET"])
@@ -146,6 +198,7 @@ def wind_station_info(station_name):
 
     data = {
         'title': station["full_name"],
+        'station': station,
         'statusData': db.get_last_status(station_name),
     }
     return render_template("info.html", **data)

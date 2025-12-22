@@ -24,7 +24,8 @@ function showLoadingTemp(isLoading) {
 
 function loadTempData() {
     showLoadingTemp(true);
-    $.getJSON(`data/temp.json?duration=${displayDuration}`, function(data) {
+    const base = window.location.pathname;
+    $.getJSON(`${base}/data/temp.json?duration=${displayDuration}`, function(data) {
         showLoadingTemp(false);
 
         console.log('Temperature data loaded:', data);

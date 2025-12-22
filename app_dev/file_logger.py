@@ -2,6 +2,7 @@ import string
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
+import glob
 
 LOG_DIR = "logs/"
 
@@ -101,9 +102,6 @@ def get_n_lines(file_name, n):
 
 
 def get_log_filenames():
-    if not os.path.isdir(LOG_DIR):
-        return []
-        return render_template("log.html", log_filenames=[])
-
     log_file_paths = glob.glob(os.path.join(LOG_DIR, "*"))
     log_filenames = sorted([os.path.basename(p) for p in log_file_paths])
+    return log_filenames

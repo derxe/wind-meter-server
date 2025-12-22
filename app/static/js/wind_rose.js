@@ -121,7 +121,7 @@ console.log("Declared samples");
 const SPEED_BINS = [1, 2, 4, 6, 8, 10];
 // Barve za vse razrede (bins.length + 1). 7 barv.
 const COLORS = [
-  'rgb(31, 105, 193)', 
+  'rgb(70, 127, 197)', 
   'rgb(55, 176, 123)',
   'rgb(83, 222, 71)', 
   'rgb(170, 255, 58)',  
@@ -439,29 +439,39 @@ function initRoseParams() {
   tooltip = document.getElementById('tooltip');
 }
 
+
+
 let result; // filtered data for the rose wind diagram
 
 let delay = 0; // minutes, how much from the last value is the window showed 
+const MAX_DELAY = 60*12; // 12 hours 
 let windowSize = 20; // minutes, how long of the duration is included in the rose data
 $(function() {
   windowSize = $('#rose-duration-select').val();
   $('#rose-delay-value').text(delay); // display the default value 
+
 
   $('#rose-duration-select').on('change', function () {
     windowSize = parseInt($(this).val(), 10);
     render();
   });
 
+  $('#rose-dec-delay').prop("disabled", delay == 0);
+  $('#rose-inc-delay').prop("disabled", delay >= MAX_DELAY);
+
   $('#rose-dec-delay').on('click', function () {
     delay = Math.max(0, delay - Math.floor(windowSize / 2));
-    $('#rose-delay-value').text(delay); 
+    $('#rose-delay-value').text(delay);
+    $('#rose-dec-delay').prop("disabled", delay == 0);
+    $('#rose-inc-delay').prop("disabled", delay >= MAX_DELAY);
     render();
   });
 
   $('#rose-inc-delay').on('click', function () {
-    const MAX_DELAY = 60*24; // 24 hours 
     delay = Math.min(MAX_DELAY, delay + Math.floor(windowSize / 2));
     $('#rose-delay-value').text(delay); 
+    $('#rose-dec-delay').prop("disabled", delay == 0);
+    $('#rose-inc-delay').prop("disabled", delay >= MAX_DELAY);
     render();
   });
 });

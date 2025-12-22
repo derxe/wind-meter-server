@@ -114,7 +114,6 @@ def get_latest_error_codes(station_name):
     return ERROR_CODE_MAP_V4
 
 
-
 def get_errors(station_name, duration_hours=12):
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     stats = list(db.statuses.find(
@@ -280,7 +279,7 @@ def parse_error_values(data):
     data["errors_parsed"] = errors 
 
 
-def parse_status_update(line, base_ts):
+def parse_status_update(line, station_name, base_ts):
     data = {}
     data["timestamp"] = base_ts # add timestamp to the data
     
@@ -302,7 +301,7 @@ def parse_status_update(line, base_ts):
 
     #parse_error_values(data)
     try:
-        calc_vbat_change_rate(data)
+        calc_vbat_change_rate(data, station_name)
     except Exception as e:
         logging.error("Error calculating vbat change rate", exc_info=True)
 
@@ -382,21 +381,19 @@ def get_station_name(imsi):
 
 
 
-
-
-def save_recived_data(line, timestamp):
+def save_recived_data(line, sender_id_imsi, timestamp):
     if not line or not timestamp:
         logging.warning("No line or timestamp to save")
         return
 
-    data, winds_data = parse_status_update(line, timestamp)
+    station_name = get_station_name(sender_id_imsi)
+
+    data, winds_data = parse_status_update(line, station_name, timestamp)
     if not data:
         logging.warning(f"No data found in line: {line}")
         return
     
     logging.info(f"Saving status update at {timestamp} with data: {data} and winds data len: {len(winds_data)}")
-
-    station_name = get_station_name(data.get("imsi", None))
 
     # save station status    
     if data is not None:
@@ -419,7 +416,7 @@ def _ensure_tz(dt):
 WINDOW_MINUTES = 90
 WINDOW = timedelta(minutes=WINDOW_MINUTES)
 
-def calc_vbat_change_rate(data):
+def calc_vbat_change_rate(data, station_name):
     # we change all the last 2 * WINDOW size of values each time we get a new vbat value
     # why 3*window? we need to grab enough values so that the last value slope is calculated correctly  
     start_time = data["timestamp"] - timedelta(minutes=WINDOW_MINUTES)
@@ -543,7 +540,7 @@ def get_last_status(station_name):
 
 
 def get_last_statuses(station_name, n=1, shift=0):
-    logging.info(f"{station_name} {n} {shift}")
+    logging.info(f"Getting last status for:{station_name} n:{n} shift:{shift}")
     cursor = (
         db.statuses.find(
             {"station_name": {"$eq": station_name}},
@@ -648,7 +645,7 @@ def get_temp(station_name, duration_hours=6):
 
     start_time = last_status["timestamp"] - timedelta(hours=duration_hours)
     temp_hum_data = list(db.statuses.find(
-        {"timestamp": {"$gte": start_time}}, 
+        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}}, 
         {"_id":0, "temp":1, "hum":1, "timestamp":1}
         ).sort("timestamp", 1))
     
@@ -732,12 +729,12 @@ def get_wind_bucketed(station_name, duration_hours=6):
     return data
 
 
-def get_dirs_bucketed(duration_hours=6):
+def get_dirs_bucketed(station_name, duration_hours=6):
     logging.info(f"Fetching bucketed dir data from the lsat {duration_hours} hours")
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     
     cursor = db.dir_bucketed.find(
-        {"timestamp": {"$gte": start_time}},
+        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}},
         {"_id": 0} # , "timestamp": 1, "min": 1, "max": 1
     ).sort("timestamp", -1)
 
@@ -793,7 +790,7 @@ def create_average_wind_values(station_name):
 
     start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.winds.find(
-        {"timestamp": {"$gte": first_data_to_average}},
+        {"timestamp": {"$gte": first_data_to_average}, "station_name": {"$eq": station_name}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
@@ -828,7 +825,7 @@ def create_average_dir_values(station_name):
 
     start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.dirs.find(
-        {"timestamp": {"$gte": first_data_to_average}},
+        {"timestamp": {"$gte": first_data_to_average}, "station_name": {"$eq": station_name}},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 

@@ -60,6 +60,22 @@ function updateTempGraph(data) {
   const lastHum  = humData[humData.length-1].y;
   $("#temp-value").text((lastTemp).toFixed(1));
   $("#hum-value").text((lastHum).toFixed(0));
+ 
+  let maxTemp = Math.max(...tempData.map(p => p.y));
+  let minTemp = Math.min(...tempData.map(p => p.y));
+  let diffTemp = maxTemp - minTemp;
+  const roundUp5 = v => Math.ceil(v / 5) * 5;
+  const roundDown5 = v => Math.floor(v / 5) * 5;
+
+  if (diffTemp < 10) {
+    const center = (maxTemp + minTemp) / 2;
+
+    maxTemp = roundUp5(center + 10);
+    minTemp = roundDown5(center - 10);
+  } else {
+    maxTemp = roundUp5(maxTemp);
+    minTemp = roundDown5(minTemp);
+  }
 
   if (!tempChart) {
   const ctx = document.getElementById('temp-chart').getContext('2d');
@@ -128,6 +144,8 @@ function updateTempGraph(data) {
           type: 'linear',
           position: 'left',
           beginAtZero: true,
+          min: minTemp,
+          max: maxTemp,
         },
 
         // Humidity axis (RIGHT)
@@ -143,6 +161,9 @@ function updateTempGraph(data) {
     }
   });
 }
+
+  tempChart.options.scales.yTemp.min = minTemp;
+  tempChart.options.scales.yTemp.max = maxTemp;
 
   tempChart.data.datasets[0].data = tempData;
   tempChart.data.datasets[1].data = humData;

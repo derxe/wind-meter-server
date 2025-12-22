@@ -4,7 +4,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=0.85, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=5" />
   <title>Sv. Peter: veterna postaja</title>
   <!-- Tailwind via CDN (no app JS) -->
   <!-- <script src="https://cdn.tailwindcss.com"></script>
@@ -22,6 +22,24 @@
   <script src="static/js/temps.js"></script>
 
   <style>
+
+    html {
+      touch-action: manipulation; /* disable double-tap zooming */
+    }
+    /*
+    to disable double-tap zooming on iOS Safari
+    we need something like that supposedly since the touch-action is ignored
+    but we dont care about that OS so I wont bother with it lol
+        let lastTouchEnd = 0;
+    document.addEventListener('touchend', e => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    }, { passive: false });
+    */
+
 
 
     @media (min-width: 1024px) {
@@ -501,7 +519,7 @@
           
           <div class="flex flex-col items-center space-y-1">
             <div class="inline-flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden">
-              <button id="rose-dec-delay" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+              <button id="rose-dec-delay" class="px-2 py-2 hover:bg-slate-200 hover:cursor-pointer text-slate-600 disabled:hover:cursor-default disabled:hover:bg-transparent disabled:opacity-50">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7"></path>
                 </svg>
@@ -511,7 +529,7 @@
                 <span id="rose-delay-value" class="font-semibold text-sm">0</span><span id="rose-delay-unit" class="text-xs ml-1">min</span> 
               </div>
 
-              <button id="rose-inc-delay" class="px-2 py-2 hover:bg-slate-200 text-slate-600">
+              <button id="rose-inc-delay" class="px-2 py-2 hover:bg-slate-200 hover:cursor-pointer text-slate-600 disabled:hover:cursor-default disabled:hover:bg-transparent disabled:opacity-50">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path>
                 </svg>

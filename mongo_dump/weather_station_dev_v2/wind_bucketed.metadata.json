@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"b68faf47345b4392bee982ef166f8b46","collectionName":"wind_bucketed","type":"collection"}

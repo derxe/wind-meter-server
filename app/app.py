@@ -118,7 +118,7 @@ def save_data_sender_id(sender_id):
     file_logs.save_query_to_log(sender_id, data)
     try:
         if sender_id == "293400130492916":
-            db.save_recived_data(data, datetime.now(ZoneInfo("Europe/Berlin")))
+            db.save_recived_data(data, sender_id, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         #logging.error(f"[ERROR] Failed to save received data: {e}", e)
         logging.exception("Failed to save received data")
@@ -151,6 +151,13 @@ def status_shift(station_name):
     shift = int(request.args.get("shift", "0"))
     statuses = db.get_last_statuses(station_name, shift=shift)
     return statuses[0] if len(statuses) > 0 else {}
+
+@app.route("/<station_name>/data/status_multi.json", methods=["GET"])
+def status_return_multi(station_name):
+    shift = int(request.args.get("shift", "0"))
+    n = int(request.args.get("n", "1"))
+    statuses = db.get_last_statuses(station_name, n=n, shift=shift)
+    return statuses if len(statuses) > 0 else []
  
 @app.route("/<station_name>/data/wind.json", methods=["GET"])
 #@cache.cached(query_string=True)

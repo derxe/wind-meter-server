@@ -42,11 +42,23 @@ let displayDuration;
 let currentGraph;
 let currentGraphY2;
 let statusShift = 0;
-let displayLogs = "all";
+let displayLogs = "raw";
 $(function() {
   showLoading(false);
   $('#chart-holder').hide();
   loadStatus();
+
+  // populate dropdown with default values: 
+  addToDropdown("vbatIde", "baterija");
+  addToDropdown("vbat_rate", "Charging rate");
+  addToDropdown("vbatGprs", "baterija med GPRS");
+  addToDropdown("vsol", "V solarna");
+  addToDropdown("signal", "signal");
+  addToDropdown("regDur", "trajanje registracije");
+  addToDropdown("gprsRegDur", "trajanje GPRS");
+  addToDropdown("dur", "trajanje skupaj");
+  addToDropdown("hum", "vlažnost");
+  addToDropdown("temp", "temperatura");
 
   displayDuration = $('#select-display-duration').val();
   console.log("Display duration:", displayDuration);
@@ -71,6 +83,12 @@ $(function() {
     showNewGraphY2(dataKey, dataText);
   });
 
+  $('#back-btn').on('click', function () {
+    if (window.location.pathname.endsWith('/info')) {
+      const newPath = window.location.pathname.replace(/\/info$/, '');
+      window.location.replace(newPath + window.location.search + window.location.hash);
+    }
+  });
 
   $('#status-shift-value').on('click', function () {
     statusShift = 0;
@@ -102,17 +120,108 @@ $(function() {
 
 
 function loadRawLogs() {
-  if(displayLogs === "all") {
+  if(displayLogs === "raw") {
     $.get(`https://to-ni.dev/veter/log/${stationData.imsi}.txt`, function (text) {
       displayRawLogs(text);
     });
-  } else {
-
+  } else if (displayLogs === "all"){
+    $.getJSON(`/${basePath}/data/status_multi.json?n=100`, function(data) {
+      displayStatuses(data);
+    });
+  } else if (displayLogs === "errors"){
     $.getJSON(`/${basePath}/data/errors.json`, function(data) {
       displayErrors(data);
     });
   }
 }
+
+function displayStatuses(data) {
+  $("#logs-value").empty().hide();
+  const container = $("#errors-value");
+  container.empty().show();
+  
+  // gather all the values in the list
+  const fieldSet = new Set();
+  data.forEach(entry => { Object.keys(entry).forEach(key => { fieldSet.add(key); }); });
+
+  const columns = [
+    "timestamp",
+    "dur_minutes",
+    ...[...fieldSet].filter(k => k !== "timestamp")
+  ];
+
+  // compute the duration between each status
+  data.forEach((entry, i) => {
+    if (i < data.length - 1) {
+      const t0 = new Date(entry.timestamp);
+      const t1 = new Date(data[i + 1].timestamp);
+      entry.dur_minutes = (t0 - t1) / 60000;
+    } else {
+      entry.dur_minutes = null;
+    }
+  });
+
+  let tableHtml = `
+  <table class="w-full text-sm border-collapse">
+    <thead class="bg-slate-100 text-slate-600">
+      <tr>
+        ${columns.map(c => `
+          <th class="px-2 py-1 border-b border-slate-200 text-left font-medium">
+            ${c.replace(/_/g, " ")}
+          </th>
+        `).join("")}
+      </tr>
+    </thead>
+    <tbody>
+  `;
+
+  data.forEach(entry => {
+    const isLong =
+      typeof entry.dur_minutes === "number" &&
+      entry.dur_minutes > 11;
+
+    tableHtml += `
+      <tr class="${isLong ? "bg-red-100 text-red-900" : "hover:bg-slate-50"}">
+        ${columns.map(col => {
+          let val = entry[col];
+
+          if (col === "timestamp") {
+            val = new Date(val).toLocaleString("de-DE", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                  });
+          } else if (col === "dur_minutes") {
+            val = typeof val === "number" ? val.toFixed(1) : "--";
+          } else if (Array.isArray(val)) {
+            val = val.length ? JSON.stringify(val) : "[]";
+          } else if (val && typeof val === "object") {
+            val = JSON.stringify(val);
+          } else {
+            val = val ?? "--";
+          }
+
+          return `
+            <td class="px-2 py-1 border-b border-slate-100 align-top whitespace-nowrap">
+              ${val}
+            </td>
+          `;
+        }).join("")}
+      </tr>
+    `;
+  });
+
+  tableHtml += `
+    </tbody>
+  </table>
+  `;
+
+  container.html(tableHtml);
+}
+
 
 function displayErrors(data) {
   $("#logs-value").empty().hide();
@@ -175,8 +284,7 @@ function displayRawLogs(rawLogsText) {
 function loadStatus() {
   $('#loading-status-msg').show();
 
-  n = 1;
-  $.getJSON(`/${basePath}/data/status.json?shift=${statusShift};n=${n}`, function(data) {
+  $.getJSON(`/${basePath}/data/status.json?shift=${statusShift}`, function(data) {
     console.log(data)
     displayStatusData(data);
   });
@@ -275,8 +383,8 @@ function showNewGraphY2(dataKey, dataName) {
 
 let chart;
 function drawGraph(data, dataName, axis) {
+  const ctx = document.getElementById('status-chart').getContext('2d');
   if (!chart) {
-    const ctx = document.getElementById('status-chart').getContext('2d');
     chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -369,6 +477,7 @@ function drawGraph(data, dataName, axis) {
       chart.data.datasets[0].data = dataValues;
       chart.data.datasets[0].label = dataName;
       chart.data.datasets[0].hidden = false;
+      setDatasetColors(chart.data.datasets[0], dataName, "y1");
     } else if(axis == "y2") {
       if(currentGraphY2.min != null && currentGraphY2.max != null) {
         chart.options.scales.y2.min = currentGraphY2.min;
@@ -380,6 +489,7 @@ function drawGraph(data, dataName, axis) {
       chart.data.datasets[1].data = dataValues;
       chart.data.datasets[1].label = dataName;
       chart.data.datasets[1].hidden = false;
+      setDatasetColors(chart.data.datasets[1], dataName, "y2");
     }
 
   } else {
@@ -394,6 +504,36 @@ function drawGraph(data, dataName, axis) {
   }
 
   chart.update();  
+}
+
+function setDatasetColors(datasets, dataName, axis) {
+  if (dataName == "Charging rate") {
+    datasets.backgroundColor = ctx => {
+      const value = ctx.raw;
+      if (value !== undefined && "y" in value) {
+        if (value.y > 0) return 'rgba(34,197,94,0.7)';   // green
+        if (value.y < 0) return 'rgba(239, 145, 68, 0.7)';   // red
+      }
+      return 'rgba(148,163,184,0.6)';                // zero
+    };
+
+    datasets.borderColor = ctx => {
+      const value = ctx.raw;
+      if (value !== undefined && "y" in value) {
+        if (value.y > 0) return 'rgb(34,197,94)';
+        if (value.y < 0) return 'rgb(239, 145, 68)';
+      }
+      return 'rgb(148,163,184)';
+    };
+  } else {               
+    if(axis == "y1") {
+      datasets.borderColor = "#36a2eb"; 
+      datasets.backgroundColor = "#9ad0f5";
+    } else {
+      datasets.borderColor = "red"; 
+      datasets.backgroundColor = "red";
+    }
+  }
 }
 
 const ErrorCodeStrings = [
@@ -478,17 +618,6 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("ver", "FW version", data["ver"]);
   displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
 
-  addToDropdown("vbatIde", "baterija");
-  addToDropdown("vbat_rate", "Charging rate");
-  addToDropdown("vbatGprs", "baterija med GPRS");
-  addToDropdown("vsol", "V solarna");
-  addToDropdown("signal", "signal");
-  addToDropdown("regDur", "trajanje registracije");
-  addToDropdown("gprsRegDur", "trajanje GPRS");
-  addToDropdown("dur", "trajanje skupaj");
-  addToDropdown("hum", "vlažnost");
-  addToDropdown("temp", "temperatura");
-  
 
   for (const [key, value] of Object.entries(data)) {
     if (displayedKeys.includes(key)) continue;
@@ -508,7 +637,6 @@ function setStatuionParametersPannel(data) {
   displayStatusBar("Napetost solarne", `${vSolar} V`, vSolarProc, solarBarColor)
   //displayStatusBar("Temepratura", `12 ˚C`, "40", "#38bdf8")
 
-  
   const vbatRate = data["vbat_rate"];
   const vbatRateLabel = vbatRate > 0? "Hitrost polnenja" : "Hitrost praznenja";
   const vbatRateProc = vbatRate / 100 * 100;

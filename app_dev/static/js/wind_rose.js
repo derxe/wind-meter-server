@@ -483,6 +483,7 @@ function roundToWholeMinutes(timestamp, round=10 * 60 * 1000) {
 
 function render() {
   console.log("Redrawing with window size:", windowSize, "and delay:", delay);
+  if(result.length == 0) return;
 
   const dur = windowSize * 60 * 1000;     // duration of the interval size 
   const shift = delay * 60 * 1000;

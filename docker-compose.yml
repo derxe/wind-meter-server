@@ -1,3 +1,5 @@
+name: wind-meter-server # we need this so that docker compose doesnt recreate volume if running dcoker compose from different directory  
+
 services:
   traefik:
     image: traefik:v3.1
@@ -8,6 +10,10 @@ services:
       # Entrypoints
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      - --entrypoints.metrics.address=:8082
+
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
 
       # NO global redirect here
 
@@ -16,13 +22,22 @@ services:
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
 
+      # Access logs (JSON)
+      - --accesslog=true
+      - --accesslog.format=json
+      - --accesslog.filepath=/logs/access.json
+      - --accesslog.bufferingsize=100
+
       - --log.level=INFO
     ports:
       - "80:80"
       - "443:443"
+      - "127.0.0.1:8082:8082"
     volumes:
       - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/gc_htpasswd:/auth/gc_htpasswd:ro
+      - ./logs/traefik:/logs
     restart: unless-stopped
 
 
@@ -61,11 +76,47 @@ services:
       - flask-app
     restart: unless-stopped
 
+
+  goatcounter:
+    image: arp242/goatcounter:latest
+    environment:
+      # Change these
+      - GC_DOMAIN=stats.to-ni.dev
+      - GC_EMAIL=you@example.com
+      # Store app data in Postgres
+      - GC_DB=postgresql://goatcounter:goatcounter@goatcounter-db:5432/goatcounter?sslmode=disable
+      # Optional: behind proxy
+      - GC_BEHIND_PROXY=true
+    depends_on:
+      - goatcounter-db
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gc.rule=Host(`stats.to-ni.dev`)
+      - traefik.http.routers.gc.entrypoints=websecure
+      - traefik.http.routers.gc.tls.certresolver=letsencrypt
+      - traefik.http.services.gc.loadbalancer.server.port=8080
+
+      #- traefik.http.routers.gc.middlewares=gc-auth@docker
+      #- traefik.http.middlewares.gc-auth.basicauth.removeheader=true # Prevents credentials from reaching the app
+      #- traefik.http.middlewares.gc-auth.basicauth.usersfile=/auth/gc_htpasswd
+    restart: unless-stopped
+
+  goatcounter-db:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=goatcounter 
+      - POSTGRES_USER=goatcounter
+      - POSTGRES_PASSWORD=goatcounter
+    volumes:
+      - goatcounter_pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+
   flask-app:
     build: ./app
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
-      - DB_CLIENT_NAME=weather_station_v2
+      - DB_CLIENT_NAME=weather_station_dev_v2
     volumes:
       - ./app:/app:rw
     # No public ports; only Nginx talks to Flask
@@ -112,5 +163,50 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: admin
     restart: always
 
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+# Traefik JSON access logs → Promtail → Loki → Grafana
+# used for reading treafik promtail 
+  loki:
+    image: grafana/loki:2.9.8
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      - ./logs/traefik:/var/log/traefik:ro
+      # Optional: if you also want nginx logs
+      # - ./logs/nginx:/var/log/nginx:ro
+      - promtail_positions:/tmp
+    restart: unless-stopped
+
+
+
 volumes:
+  loki_data:
+  promtail_positions:
   mongodb_data:
+  goatcounter_pg:
+  grafana_data:

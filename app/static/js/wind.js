@@ -198,11 +198,17 @@ let windChart;
 let lastAvgValue;
 let lastMaxValue;
 function updateWindGraph(data) {
+  if(data.length == 0) return;
+
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const avgGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.avg}));
   const maxGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.max}));
 
   const ctx = document.getElementById('wind-chart').getContext('2d');
+  
+  const desiredMax = 8; // m/s
+  const dataMax = Math.ceil(Math.max(...maxGrid.map(p => p.y)));
+  const yAxisMax = Math.max(desiredMax, dataMax);
 
   lastAvgValue = avgGrid[avgGrid.length-1].y;
   lastMaxValue = maxGrid[maxGrid.length-1].y;
@@ -216,6 +222,8 @@ function updateWindGraph(data) {
 
     return (endX - startX) / 3600000;   // ms → hours
   }
+
+
 
   const dataDuration = getDurationHours(avgGrid);
   
@@ -239,7 +247,7 @@ function updateWindGraph(data) {
                 spanGaps: 1*60*60*1000, // dont draw the line if the data is more then 1 hour appart
             },
             {
-                label: "maksimalna",
+                label: "sunki",
                 data: maxGrid,
                 borderWidth: 2,
                 tension: 0.4,
@@ -266,9 +274,11 @@ function updateWindGraph(data) {
               duration: 0
           },
           plugins: {
-              legend: {
-                  display: false,
-              }
+            legend: {
+              display: false,
+              position: 'bottom',
+              labels: { usePointStyle: true, padding: 12 }
+            }
           },
           responsive: true,
           maintainAspectRatio: false,
@@ -306,12 +316,14 @@ function updateWindGraph(data) {
   windChart.data.datasets[0].showLine = showLine;  
   windChart.data.datasets[1].showLine = showLine; 
 
+  windChart.options.scales.y.max = yAxisMax;
 
   windChart.update();   
 }
 
 let dirChart;
 function updateDirectionGraph(data) {
+    if(data.length == 0) return;
     // const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
 
     const dirGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.dir }));

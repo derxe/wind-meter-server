@@ -30,6 +30,13 @@
     <div class="relative" >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
+          <button
+            id="back-btn" class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
+                  hover:bg-slate-200 active:bg-slate-300 transition" aria-label="Back" >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <h1 class="text-lg leading-tight">
             Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
           </h1>
@@ -131,13 +138,14 @@
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
         <!--{{ sleep_overlay() }}-->
 
-        <div class="p-1 pb-2 flex justify-between gap-4 pr-2">
+        <div class="p-1 pb-2 flex  gap-4 pr-2">
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-base">Raw logs:</h2>
           </div>
 
           <div id="toggle-show-log-errors" class="inline-flex rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-            <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="all">All</button>
+            <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="raw">Raw</button>
+            <button class="px-3 py-1.5 text-sm bg-white text-slate-600 hover:bg-slate-100" value="all">All</button>
             <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="errors">Errors</button>
           </div>
         </div>

@@ -46,6 +46,7 @@ function getTempData() {
 
 let tempChart;
 function updateTempGraph(data) {
+  if(data.length == 0) return;
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   const tempData = data
@@ -55,6 +56,15 @@ function updateTempGraph(data) {
   const humData = data
       .filter(d => d.hum != null)
       .map(d => ({ x: new Date(d.timestamp).getTime(), y: d.hum }));
+
+  const tempData_in = data
+      .filter(d => d.temp_in != null)
+      .map(d => ({ x: new Date(d.timestamp).getTime(), y: d.temp_in }));
+
+  const humData_in = data
+          .filter(d => d.hum_in != null)
+          .map(d => ({ x: new Date(d.timestamp).getTime(), y: d.hum_in }));
+  
 
   const lastTemp = tempData[tempData.length-1].y;
   const lastHum  = humData[humData.length-1].y;
@@ -84,17 +94,20 @@ function updateTempGraph(data) {
     type: 'line',
     data: {
       datasets: [
+        // --- TEMPERATURA ZUNAJ ---
         {
           label: "Temperatura (°C)",
           data: tempData,
           borderWidth: 2,
           tension: 0.4,
           pointRadius: 2,
-          yAxisID: 'yTemp',
+          yAxisID: "yTemp",
           borderColor: "#1e88e5",      // blue
-          backgroundColor: "#90caf9", // light blue
+          backgroundColor: "#90caf9",
           spanGaps: 1 * 60 * 60 * 1000,
         },
+
+        // --- VLAGA ZUNAJ ---
         {
           label: "Vlaga (%)",
           data: humData,
@@ -102,9 +115,37 @@ function updateTempGraph(data) {
           borderWidth: 2,
           tension: 0.4,
           pointRadius: 2,
-          yAxisID: 'yHumidity',
-          borderColor: "#a5d6a7",      // green
-          backgroundColor: "#a5d6a7",  // light green
+          yAxisID: "yHumidity",
+          borderColor: "#43a047",      // green (stronger)
+          backgroundColor: "#a5d6a7",
+          spanGaps: 1 * 60 * 60 * 1000,
+        },
+
+        // --- TEMPERATURA ZNOTRAJ ---
+        {
+          label: "Temperatura znotraj (°C)",
+          data: tempData_in,
+          hidden: true,
+          borderWidth: 2,
+          tension: 0.4,
+          pointRadius: 2,
+          yAxisID: "yTemp",
+          borderColor: "#fb8c00",      // orange
+          backgroundColor: "#ffcc80",
+          spanGaps: 1 * 60 * 60 * 1000,
+        },
+
+        // --- VLAGA ZNOTRAJ ---
+        {
+          label: "Vlaga znotraj (%)",
+          data: humData_in,
+          hidden: true,
+          borderWidth: 2,
+          tension: 0.4,
+          pointRadius: 2,
+          yAxisID: "yHumidity",
+          borderColor: "#8e24aa",      // purple
+          backgroundColor: "#ce93d8",
           spanGaps: 1 * 60 * 60 * 1000,
         },
       ]
@@ -115,7 +156,14 @@ function updateTempGraph(data) {
         legend: {
           display: true,
           position: 'bottom',
-          labels: { usePointStyle: true, padding: 12 }
+          labels: { 
+            usePointStyle: true, 
+            padding: 12,
+            filter: (legendItem, chart) => { // show only legend items if there is any data inside
+              const ds = chart.datasets[legendItem.datasetIndex];
+              return Array.isArray(ds.data) && ds.data.length > 0;
+            }
+          }
         }
       },
       responsive: true,
@@ -167,6 +215,9 @@ function updateTempGraph(data) {
 
   tempChart.data.datasets[0].data = tempData;
   tempChart.data.datasets[1].data = humData;
+
+  tempChart.data.datasets[2].data = tempData_in;
+  tempChart.data.datasets[3].data = humData_in;
 
   tempChart.update();   
 }

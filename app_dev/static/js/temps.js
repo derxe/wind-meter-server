@@ -46,6 +46,7 @@ function getTempData() {
 
 let tempChart;
 function updateTempGraph(data) {
+  if(data.length == 0) return;
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   const tempData = data

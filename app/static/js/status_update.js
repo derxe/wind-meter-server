@@ -10,7 +10,8 @@ function getStatus() {
     // if preloadedStatusData exist load that data instead of getting query for it 
     displayStatusData(preloadedStatusData);
   } else {
-    $.getJSON("data/status.json", function(data) {
+    const base = window.location.pathname;
+    $.getJSON(`${base}/data/status.json`, function(data) {
       console.log(data)
       displayStatusData(data);
     });
@@ -118,6 +119,7 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("Signal:", signalQualityStr);
   displayStatusInfo("Trajanje pošiljanja:", (data["dur"]??"--") + "s");
   displayStatusInfo("FW version:", data["ver"]);
+  displayStatusInfo("Imsi:", data["imsi"]??"--");
   displayStatusInfo("Telefonska:", data["phoneNum"]??"--");
 
   const battProc = batteryVoltageToProcentage(data["vbatIde"]);

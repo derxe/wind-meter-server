@@ -1,0 +1,41 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: traefik_access
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: traefik
+          __path__: /var/log/traefik/access.json
+
+    pipeline_stages:
+      - json:
+          expressions:
+            # Common Traefik fields (names can vary slightly by version)
+            status: status
+            method: method
+            duration: duration
+            router: routerName
+            service: serviceName
+            # Try to capture path-ish fields (may differ; we still keep them in the log line)
+            path: path
+            request: request
+
+      # Put only low-cardinality stuff into labels (fast filtering)
+      - labels:
+          status:
+          method:
+          router:
+          service:
+
+      # Optional: make log line nicer (keep full JSON if you prefer)
+      - output:
+          source: request

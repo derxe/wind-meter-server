@@ -4,12 +4,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=5" />
-  <title>Sv. Peter: veterna postaja</title>
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=3" />
+  <title>{{ station.full_name }}: veterna postaja</title>
   <!-- Tailwind via CDN (no app JS) -->
   <!-- <script src="https://cdn.tailwindcss.com"></script>
   <script src="static/css/tailwind-3-4-17.min.js"></script> -->
 
+  <script data-goatcounter="https://stats.to-ni.dev/count" async src="//stats.to-ni.dev/count.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
@@ -39,8 +40,6 @@
       lastTouchEnd = now;
     }, { passive: false });
     */
-
-
 
     @media (min-width: 1024px) {
       .status-border {
@@ -242,6 +241,7 @@
 </head>
 
 <script>
+  stationData = {{ station | tojson }};
   preloadedStatusData =  {{ statusData | tojson }}; 
   preloadedWindData =  {{ windData | tojson }}; 
   preloadedTempData =  {{ tempData | tojson }}; 
@@ -265,6 +265,19 @@
   */
 </script>
 
+<script>
+  $(function() {
+    if(stationData.message) {
+      $("#station-msg-box").show();
+      $("#station-msg").html(stationData.message);
+    }
+
+    $("#back-btn").click(() => {
+      window.location.pathname = "";
+    })
+  })
+</script>
+
 <body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> <!-- bg-sky-100 -->
 
 
@@ -272,29 +285,52 @@
     <div class="relative bg-white" >
     <div class="relative" >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div>
-            
-            <h1 class="text-lg leading-tight">
-              Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
-            </h1>
+        <div class="flex flex-col gap-2">
+        <!-- Title row -->
+        <div class="flex items-center gap-2">
+          <button
+            id="back-btn"
+            class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
+                  hover:bg-slate-200 active:bg-slate-300 transition"
+            aria-label="Back">
+            <svg xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="3"
+                    d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
 
-            <div class="flex flex-row items-center justify-between h-full mt-3">
-              <span class="status-badge self-center w-auto inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
-                <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
-                <span id="status-title-text" class="pl-[2px] whitespace-nowrap">
-                  Deluje
-                </span>
-              </span>
-
-              <span id="status-detailed-text"
-                    class="text-xs text-slate-500 mt-0 ml-2">
-                ---
-              </span>
-            </div>
-
-          </div>
+          <h1 class="text-lg leading-tight">
+            Vetrna Postaja –
+            <span class="text-xl font-semibold">
+              {{ station.full_name }}
+            </span>
+          </h1>
         </div>
+
+        <!-- Status row -->
+        <div class="flex items-center gap-2 ml-">
+          <span class="status-badge inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
+            <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
+            <span id="status-title-text" class="pl-[2px] whitespace-nowrap">
+              Deluje
+            </span>
+          </span>
+
+          <span id="status-detailed-text"
+                class="text-xs text-slate-500">
+            ---
+          </span>
+        </div>
+      </div>
+
+
+
       </div>
 
       </div>
@@ -305,10 +341,44 @@
     </div>
   </div>
 
+  <div id="station-msg-box" class="relative max-w-6xl mx-auto mb-3
+              rounded-2xl border border-yellow-300
+              bg-yellow-50 shadow-sm p-4" style="display: none;">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-2">
+      <!-- Warning icon -->
+      <div class="flex h-8 w-8 items-center justify-center
+                  rounded-full bg-yellow-100 text-yellow-600">
+        <svg xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+
+      <h2 class="font-semibold text-base text-yellow-800">
+        Obvestilo
+      </h2>
+    </div>
+
+    <!-- Message body -->
+    <div id="station-msg"
+        class="text-sm text-yellow-900 leading-relaxed">
+    </div>
+
+  </div>
+
   <!-- Content -->
   <main class="max-w-7xl mx-auto px-1 lg:px-6 pt-3 grid gap-6 lg:grid-cols-3 items-start">
    
-
     <!-- Left column: charts + wind rose (same width) -->
     <section class="lg:col-span-2 grid gap-6">
       <!-- Wind Speed Card -->
@@ -327,6 +397,7 @@
                 <span id="max-value" class="text-xl font-semibold text-rose-500/80">--</span>
                 <span id="max-unit" class="text-sm text-slate-500"></span>
               </div>
+               <div class="text-xs text-slate-500">sunki</div>
             </div>
 
             <!-- AVG block -->
@@ -335,7 +406,12 @@
                 <span id="avg-value" class="text-3xl font-semibold text-sky-500/80">--</span>
                 <span id="avg-unit" class="text-base text-slate-500"></span>
               </div>
+               <div class="text-xs text-slate-500">povprečna</div>
             </div>
+
+
+
+
           </div>
         </div>
 
@@ -398,8 +474,10 @@
         <div class="p-1 pb-2 flex justify-between gap-4">
           <div>
             <h2 class="font-semibold text-l">Temperatura</h2>
+              {% if station.temp_msg_warning %}
              <div class="text-xs text-slate-500">⚠️ Temperatura je izmerjena v ohišju, zato je višja od dejanske.</div>
-          </div>
+              {% endif %}
+            </div>
 
           <div class="flex items-end gap-4 text-right pr-1">
 
@@ -448,9 +526,13 @@
 
         <!-- Map + rose placeholders -->
         <div class="relative flex items-center justify-center w-full rounded-2xl overflow-hidden border border-slate-200">
-          
-          <img src="/veter/static/img/peter_wide.jpg" class="absolute inset-0 h-full w-full object-cover z-1"/>
 
+          {% if station.wind_rose_img %}
+            <img src="/veter/static/img/{{ station.wind_rose_img }}" class="absolute inset-0 h-full w-full object-cover z-1"/>
+          {% else %}
+            <div class="absolute bg-slate-200 inset-0 h-full w-full object-cover z-1"></div>
+          {% endif %}
+          
           <div id="wind-rose-loading" class="absolute max-h-96 inset-0 flex flex-col items-center justify-center z-10">
             <svg
               class="animate-spin text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]"
@@ -561,10 +643,54 @@
 
       </div>
 
+
+      <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
+        <h3 id="double-click-show-detailed"
+            class="font-semibold mb-3 select-none">
+          Lokacija
+        </h3>
+
+        <div class="flex flex-col gap-2 text-sm text-slate-700">
+          <!-- Location name -->
+          <div class="flex items-center gap-2">
+            <span class="text-slate-500">Kje:</span>
+            <span class="font-medium">
+              {{ station.location.name }}
+            </span>
+          </div>
+
+          <!-- Coordinates -->
+          <div class="flex items-center gap-2">
+            <span class="text-slate-500">Koordinate:</span>
+            <span class="font-mono">
+              {{ station.location.lat }}, {{ station.location.lon }}
+            </span>
+          </div>
+
+          <!-- Google Maps link -->
+          <a
+            href="{{ station.location.gmaps_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-sm text-sky-600 hover:text-sky-700
+                  hover:underline mt-1 w-fit">
+
+            <!-- Map icon -->
+            <svg xmlns="http://www.w3.org/2000/svg"
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="currentColor">
+            <path d="M12 2c-3.866 0-7 3.134-7 7 0 5.25 7 13 7 13s7-7.75 7-13c0-3.866-3.134-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/>
+          </svg>
+
+
+            Odpri v Google Maps
+          </a>
+        </div>
+      </div>
+
     </aside>
   </main>
-
-
 
   <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
     © 2025 Paraglidng Wind Station · Built with ❤️ for paragliding 🪂

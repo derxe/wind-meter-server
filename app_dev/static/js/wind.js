@@ -198,6 +198,8 @@ let windChart;
 let lastAvgValue;
 let lastMaxValue;
 function updateWindGraph(data) {
+  if(data.length == 0) return;
+
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const avgGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.avg}));
   const maxGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.max}));
@@ -312,6 +314,7 @@ function updateWindGraph(data) {
 
 let dirChart;
 function updateDirectionGraph(data) {
+    if(data.length == 0) return;
     // const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
 
     const dirGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.dir }));

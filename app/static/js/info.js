@@ -60,6 +60,11 @@ $(function() {
   addToDropdown("hum", "vlažnost");
   addToDropdown("temp", "temperatura");
 
+  addToDropdown("hum_out", "vlažnost zunaj");
+  addToDropdown("temp_out", "temperatura zunaj");
+  addToDropdown("hum_in", "vlažnost notri");
+  addToDropdown("temp_in", "temperatura notri");
+
   displayDuration = $('#select-display-duration').val();
   console.log("Display duration:", displayDuration);
   $('#select-display-duration').on('change', function () {
@@ -361,7 +366,7 @@ function getGraphData(dataKey, dataName) {
     graphData.max = 8;
   } else if(dataKey == "vbatIde" || dataKey == "vbatGprs") {
     graphData.min = 3.4;
-    graphData.max = 4.2;
+    graphData.max = 4.3;
   } else {
     graphData.min = null;
     graphData.max = null;

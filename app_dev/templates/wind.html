@@ -4,12 +4,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=0.85, user-scalable=no" />
-  <title>Sv. Peter: veterna postaja</title>
+  <meta name="viewport" content="width=device-width, initial-scale=0.85, maximum-scale=3" />
+  <title>{{ station.full_name }}: veterna postaja</title>
   <!-- Tailwind via CDN (no app JS) -->
   <!-- <script src="https://cdn.tailwindcss.com"></script>
   <script src="static/css/tailwind-3-4-17.min.js"></script> -->
 
+  <script data-goatcounter="https://stats.to-ni.dev/count" async src="//stats.to-ni.dev/count.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon"></script>
@@ -23,6 +24,22 @@
 
   <style>
 
+    html {
+      touch-action: manipulation; /* disable double-tap zooming */
+    }
+    /*
+    to disable double-tap zooming on iOS Safari
+    we need something like that supposedly since the touch-action is ignored
+    but we dont care about that OS so I wont bother with it lol
+        let lastTouchEnd = 0;
+    document.addEventListener('touchend', e => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    }, { passive: false });
+    */
 
     @media (min-width: 1024px) {
       .status-border {
@@ -224,6 +241,7 @@
 </head>
 
 <script>
+  stationData = {{ station | tojson }};
   preloadedStatusData =  {{ statusData | tojson }}; 
   preloadedWindData =  {{ windData | tojson }}; 
   preloadedTempData =  {{ tempData | tojson }}; 
@@ -247,6 +265,15 @@
   */
 </script>
 
+<script>
+  $(function() {
+    if(stationData.message) {
+      $("#station-msg-box").show();
+      $("#station-msg").html(stationData.message);
+    }
+  })
+</script>
+
 <body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> <!-- bg-sky-100 -->
 
 
@@ -258,7 +285,7 @@
           <div>
             
             <h1 class="text-lg leading-tight">
-              Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
+              Vetrna Postaja - <span class="text-xl font-semibold">{{ station.full_name }}</span>
             </h1>
 
             <div class="flex flex-row items-center justify-between h-full mt-3">
@@ -287,10 +314,44 @@
     </div>
   </div>
 
+  <div id="station-msg-box" class="relative max-w-6xl mx-auto mb-3
+              rounded-2xl border border-yellow-300
+              bg-yellow-50 shadow-sm p-4" style="display: none;">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-2">
+      <!-- Warning icon -->
+      <div class="flex h-8 w-8 items-center justify-center
+                  rounded-full bg-yellow-100 text-yellow-600">
+        <svg xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+
+      <h2 class="font-semibold text-base text-yellow-800">
+        Obvestilo
+      </h2>
+    </div>
+
+    <!-- Message body -->
+    <div id="station-msg"
+        class="text-sm text-yellow-900 leading-relaxed">
+    </div>
+
+  </div>
+
   <!-- Content -->
   <main class="max-w-7xl mx-auto px-1 lg:px-6 pt-3 grid gap-6 lg:grid-cols-3 items-start">
    
-
     <!-- Left column: charts + wind rose (same width) -->
     <section class="lg:col-span-2 grid gap-6">
       <!-- Wind Speed Card -->
@@ -424,14 +485,17 @@
         </div>
 
 
-
-
         <input id="time-slider" class="hidden" type="range" min="1" max="300" step="10" value="20" />
 
         <!-- Map + rose placeholders -->
         <div class="relative flex items-center justify-center w-full rounded-2xl overflow-hidden border border-slate-200">
           
-          <img src="/veter/static/img/peter_wide.jpg" class="absolute inset-0 h-full w-full object-cover z-1"/>
+          {% if station.wind_rose_img %}
+            <img src="{{ station.wind_rose_img }}" class="absolute inset-0 h-full w-full object-cover z-1"/>
+          {% else %}
+            <div class="absolute bg-slate-200 inset-0 h-full w-full object-cover z-1"></div>
+          {% endif %}
+
 
           <div id="wind-rose-loading" class="absolute max-h-96 inset-0 flex flex-col items-center justify-center z-10">
             <svg

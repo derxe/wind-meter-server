@@ -22,7 +22,7 @@ if "MONGO_URI" not in os.environ:
 
 logging.info(str(os.environ))
 DB_URL = os.environ.get("MONGO_URI", "mongodb://admin:3SOWk2YyRtBOkP5wVmnw@localhost:27017")
-DB_CLIENT_NAME = os.environ.get("DB_CLIENT_NAME", "weather_station_dev_v2")
+DB_CLIENT_NAME = "weather_station_dev_v2" # os.environ.get("DB_CLIENT_NAME", "weather_station_dev2_v2")
 if DB_CLIENT_NAME is None:
     raise ValueError("Unable to get DB_CLIENT_NAME from environment. Cant run db.py")
 
@@ -35,9 +35,7 @@ logging.info("connected to MongoDB")
 db = client[DB_CLIENT_NAME]
 
 # wind speed conversion between RPMs measured to m/s 
-SPEED_RPM_TO_MS = 0.33/3.6
-
-DIR_ADJUSTMENT = -15 # for how many degrees do we adjust the measurement 
+DEF_SPEED_RPM_TO_MS = 0.33/3.6  # 0.091667
 
 
 def get_stations():
@@ -67,6 +65,14 @@ def add_station(station: dict):
         {"$set": station},           # update all fields
         upsert=True                 # insert if not found
     )
+
+def get_station_speed_to_rpm(station_name):
+    station = get_station(station_name)
+    if station is None or "rpm_to_ms" not in station:
+        return DEF_SPEED_RPM_TO_MS
+    
+    return station["rpm_to_ms"]
+
 
 ERROR_CODE_MAP_V4 = {
     e["code"]: e["code_name"]
@@ -186,7 +192,7 @@ def generate_times(base_ts, start_s: int, end_s: int, count: int):
 
     if count < 1:
         return []
-
+    
     # Basic validation to avoid crossing days (no wrapping)
     if not (0 <= start_s <= end_s <= 24 * 60 * 60):
         raise ValueError("start_s and end_s must satisfy 0 <= start_s <= end_s <= 86400.")
@@ -279,11 +285,15 @@ def parse_error_values(data):
     data["errors_parsed"] = errors 
 
 
-def parse_status_update(line, station_name, base_ts):
+def parse_status_update(line, station, base_ts):
     data = {}
     data["timestamp"] = base_ts # add timestamp to the data
     
+    logging.info(f"Saving data for station: {station}")
     for part in line.split(";"):
+        if len(part) == 0:
+            continue
+
         if "=" not in part:
             logging.warning(f"Malformed part missing '=' in the line: '{line}'. part: '{part}'")
             continue
@@ -296,12 +306,17 @@ def parse_status_update(line, station_name, base_ts):
         key, val  = parts
         data[key.strip()] = val
             
-        #else:
-        #    print(f"No = in the status part. part:'{part}'")
+
+    # some stations send seperate temp_out and temp_in, write temp_out as the "real" temperature
+    if "temp_out" in data:
+        data["temp"] = data["temp_out"]
+    
+    if "hum_out" in data:
+        data["hum"] = data["hum_out"]
 
     #parse_error_values(data)
     try:
-        calc_vbat_change_rate(data, station_name)
+        pass #calc_vbat_change_rate(data, station_name)
     except Exception as e:
         logging.error("Error calculating vbat change rate", exc_info=True)
 
@@ -322,7 +337,8 @@ def parse_status_update(line, station_name, base_ts):
     data.pop("logLast", None)
     data.pop("len", None)
 
-    dirs = [(d+DIR_ADJUSTMENT) % 360 for d in dirs]
+    dir_adjustment = station["dir_adjustment"] if "dir_adjustment" in station else 0
+    dirs = [(d+dir_adjustment) % 360 for d in dirs]
 
     #pprint.pprint(timestamps)
     
@@ -372,13 +388,12 @@ def set_timestamps_to_data(data, timestamps):
 
     return data_with_timestamps
 
-
-def get_station_name(imsi):
+def get_station(imsi):
+    device = None
     if imsi is not None:
         device = get_station_with_imsi(imsi)
     
-    return "unknown_station" if device is None or "name" not in device else device["name"] 
-
+    return device
 
 
 def save_recived_data(line, sender_id_imsi, timestamp):
@@ -386,9 +401,20 @@ def save_recived_data(line, sender_id_imsi, timestamp):
         logging.warning("No line or timestamp to save")
         return
 
-    station_name = get_station_name(sender_id_imsi)
+    # todo check if this code is logically constistant and if it should work 
+    station = get_station(sender_id_imsi)
+    if station is None:
+        add_station({
+            "imsi": sender_id_imsi,
+            "name": f"unnamed_{sender_id_imsi}",
+            "full_name": f"{sender_id_imsi}",
+            "created_on": datetime.now(TZ)
+        })
+        station = get_station(sender_id_imsi)
 
-    data, winds_data = parse_status_update(line, station_name, timestamp)
+    station_name = station["name"]
+
+    data, winds_data = parse_status_update(line, station, timestamp)
     if not data:
         logging.warning(f"No data found in line: {line}")
         return
@@ -433,6 +459,8 @@ def calc_vbat_change_rate(data, station_name):
     timestamps.append(data["timestamp"])
     values.append(float(data["vbatIde"]))
 
+    pprint.pprint(values)
+    pprint.pprint(timestamps)
     slope = caluculate_change_rate(values, timestamps)
     #slope2 = caluculate_change_rate(slope1, timestamps)
 
@@ -603,9 +631,10 @@ def get_wind(station_name, duration_hours: int = 6):
     ).sort("timestamp", -1)
 
     data = []
+    speed_rpm_to_ms = get_station_speed_to_rpm(station_name)
     for doc in cursor:
         doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
-        doc["value"] = round(doc["value"] * SPEED_RPM_TO_MS, 2)
+        doc["value"] = round(doc["value"] * speed_rpm_to_ms, 2)
         data.append(doc)
 
     return data
@@ -646,7 +675,7 @@ def get_temp(station_name, duration_hours=6):
     start_time = last_status["timestamp"] - timedelta(hours=duration_hours)
     temp_hum_data = list(db.statuses.find(
         {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}}, 
-        {"_id":0, "temp":1, "hum":1, "timestamp":1}
+        {"_id":0, "temp":1, "hum":1, "temp_in":1, "hum_in":1, "timestamp":1}
         ).sort("timestamp", 1))
     
     if len(temp_hum_data) == 0:
@@ -660,11 +689,21 @@ def get_temp(station_name, duration_hours=6):
         hum = d.get("hum", "nan")
         hum = int(hum) if hum != "nan" else None
 
-        filtered_data.append({
+        data = {
             "timestamp": d["timestamp"].astimezone(TZ).isoformat(),
             "temp": temp,
             "hum": hum,
-        })
+        }
+        
+        if "temp_in" in d:
+            temp_in = d.get("temp_in", "nan")
+            data["temp_in"] = float(temp_in) if temp_in != "nan" else None
+
+        if "hum_in" in d:
+            hum_in = d.get("hum_in", "nan")
+            data["hum_in"] = int(hum_in) if hum_in != "nan" else None
+
+        filtered_data.append(data)
     
     return filtered_data
 
@@ -754,7 +793,7 @@ def get_n_data():
 
 
 # parsed saved line from the file, the lines in the file has timestamp appended 
-def parse_saved_line(line):
+def parse_saved_line(line, sender_imsi):
     if "- " not in line:
         return None
     
@@ -763,12 +802,12 @@ def parse_saved_line(line):
 
     data_str = line[line.index("- ")+2:].strip()
 
-    save_recived_data(data_str, timestamp)
+    save_recived_data(data_str, sender_imsi, timestamp)
 
 
 def set_last_bucket_filled(station_name, timestamp_ms, type_name):
     last_bucket_filed = datetime.fromtimestamp(timestamp_ms / 1000, tz=TZ)
-    logging.info(f"setting last_bucket_filed: '{last_bucket_filed}'")
+    logging.info(f"setting last_bucket_filed: for:'{type_name}' '{last_bucket_filed}'")
     db.bucket_props.update_one(
         {"_id": station_name},
         {"$set": {"last_bucket_filed_" + type_name: last_bucket_filed}},
@@ -790,15 +829,16 @@ def create_average_wind_values(station_name):
 
     start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.winds.find(
-        {"timestamp": {"$gte": first_data_to_average}, "station_name": {"$eq": station_name}},
+        {"timestamp": {"$gte": first_data_to_average}, "station_name": station_name},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
     wind_data = []
+    speed_rpm_to_ms = get_station_speed_to_rpm(station_name)
     for doc in cursor:
         timestamp = int(doc['timestamp'].astimezone(TZ).timestamp() * 1000)
         doc["x"] = timestamp
-        doc["y"] = doc["value"] * SPEED_RPM_TO_MS
+        doc["y"] = doc["value"] * speed_rpm_to_ms
         wind_data.append(doc)
     
     #pprint.pprint(len(wind_data))
@@ -815,7 +855,7 @@ def create_average_wind_values(station_name):
     #pprint.pprint(wind_bucketed)
     
     timestamps = [item["timestamp"] for item in wind_bucketed]
-    db.wind_bucketed.delete_many({"timestamp": {"$in": timestamps}})
+    db.wind_bucketed.delete_many({"timestamp": {"$in": timestamps}, "station_name": station_name})
     db.wind_bucketed.insert_many(wind_bucketed)
 
 
@@ -825,7 +865,7 @@ def create_average_dir_values(station_name):
 
     start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.dirs.find(
-        {"timestamp": {"$gte": first_data_to_average}, "station_name": {"$eq": station_name}},
+        {"timestamp": {"$gte": first_data_to_average}, "station_name": station_name},
         {"_id": 0, "timestamp": 1, "value": 1}
     ).sort("timestamp", -1)
 
@@ -836,6 +876,7 @@ def create_average_dir_values(station_name):
         doc["y"] = int((doc["value"] + 22.5) // 45 % 8)
         dirs_data.append(doc)
     
+    logging.info(f"bucket dir values len: {len(dirs_data)}")
     #pprint.pprint(len(dirs_data))
     dirs_bucketed, last_bucket_filed_ms  = bucket_aggregate(dirs_data, modes=["mode"])
     if dirs_bucketed is None:
@@ -847,10 +888,9 @@ def create_average_dir_values(station_name):
 
     set_last_bucket_filled(station_name, last_bucket_filed_ms, "dir")
 
-    #pprint.pprint(dirs_bucketed)
-    
+    logging.info(f"dir bucketed values: {pprint.pformat(dirs_bucketed)}")
     timestamps = [item["timestamp"] for item in dirs_bucketed]
-    db.dir_bucketed.delete_many({"timestamp": {"$in": timestamps}})
+    db.dir_bucketed.delete_many({"timestamp": {"$in": timestamps}, "station_name": station_name})
     db.dir_bucketed.insert_many(dirs_bucketed)
 
 
@@ -1189,8 +1229,7 @@ if __name__ == "__main__":
         print(f"{timestamp.astimezone(TZ).isoformat()};{value}")
     """
 
-    #db.wind_bucketed.delete_many({})
-    #db.dir_bucketed.delete_many({})
+
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "wind")
     #set_last_bucket_filled((datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "dir")
 
@@ -1221,7 +1260,7 @@ if __name__ == "__main__":
     #    {} # "_id":0, "temp":1, "hum":1, "timestamp":1
     #    ).sort("timestamp", 1))
     #pprint.pprint(data)
-
+    """
     station_name = "peter"
     start_time = datetime.now(TZ) - timedelta(days=1)
     stats = list(db.statuses.find(
@@ -1248,14 +1287,65 @@ if __name__ == "__main__":
 
     print("All errors:")
     pprint.pprint(delayed_errors)
+
+    """
+    station_name = "stol"
+    imsi = "293400130750143"
+    """
+    db.statuses.delete_many({"station_name": station_name})
+    db.winds.delete_many({"station_name": station_name})
+    db.dirs.delete_many({"station_name": station_name})
+    db.wind_bucketed.delete_many({"station_name": station_name})
+    db.dir_bucketed.delete_many({"station_name": station_name})
+    set_last_bucket_filled(station_name, (datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "wind")
+    set_last_bucket_filled(station_name, (datetime.now(TZ) - timedelta(days=7)).timestamp()*1000, "dir")
     
+    station_name = "peter"
+    set_last_bucket_filled(station_name, (datetime.now(TZ) - timedelta(days=3)).timestamp()*1000, "wind")
+    set_last_bucket_filled(station_name, (datetime.now(TZ) - timedelta(days=3)).timestamp()*1000, "dir")
+    
+    create_average_wind_values(station_name)
+    create_average_dir_values(station_name)
+    """
+
+    result = db.statuses.update_many(
+        {
+            "station_name": "stol",
+            "temp_out": {"$exists": True},
+            "hum_out": {"$exists": True},
+        },
+        [
+            {
+                "$set": {
+                    "temp": "$temp_out",
+                    "hum": "$hum_out",
+                }
+            }
+        ]
+    )
+
+    print("matched: ", result.matched_count, "modified:", result.modified_count)
+
+
+
+
+    #with open("data.txt", "r") as f:
+    #    for line in f:
+    #        try:
+    #line="2025-12-22T17:10:05.317375+01:00- pref=4;prefDate=1970-01-01_00:00:00;ver=v4;imsi=293400130750143;phoneNum=69867551;temp=-3.2;hum=83;vbatIde=4.034;vbatGprs=4.002;vsol=0.086;dur=13.5;signal=27;simDur=2.7;regDur=2.3;gprsRegDur=1.7;errors=20:199;len=120;avg=96,107,91,83,79,80,74,87,72,76,98,105,109,111,94,74,76,83,78,80,100,114,104,90,89,100,106,103,106,94,96,95,91,89,94,102,84,67,82,80,74,78,69,89,101,68,80,100,102,91,87,100,95,93,93,89,119,113,116,99,103,88,104,94,100,96,87,81,103,88,98,105,94,95,98,88,75,78,92,103,116,101,103,104,110,111,112,104,93,90,79,95,96,102,87,91,93,111,118,99,81,91,98,106,108,105,126,108,106,108,116,97,102,95,104,101,102,93,110,97;dir=0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0;logFirst=61205;logLast=61800;"
+    #parse_saved_line(line.strip(), imsi)
+    #        except Exception as e:
+                #logging.error(f"[ERROR] Failed to save received data: {e}", e)
+    #            logging.exception("Failed to save received data")
+    #        print(".", end="", flush=True)
+
+
     print("Devices: ", get_stations())
     print("Number of statuses:", db.statuses.count_documents({}))
     print("Number of winds:", db.winds.count_documents({}))
     print("Number of dirs:", db.dirs.count_documents({}))
     print("Number of wind_bucketed:", db.wind_bucketed.count_documents({}))
     print("Number of dir_bucketed:", db.dir_bucketed.count_documents({}))
-
 
     #print("Parsed Status Update:")
     #print(json.dumps(parse_status_update(line), indent=2))

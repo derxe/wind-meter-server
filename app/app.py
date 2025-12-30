@@ -115,14 +115,21 @@ def save_data_sender_id(sender_id):
 
     response = f"saved: {len(data)}\n"
 
-    file_logs.save_query_to_log(sender_id, data)
+    file_logs.save_query_to_log(sender_id, data) 
     try:
-        if sender_id == "293400130492916":
-            db.save_recived_data(data, sender_id, datetime.now(ZoneInfo("Europe/Berlin")))
+        db.save_recived_data(data, sender_id, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         #logging.error(f"[ERROR] Failed to save received data: {e}", e)
         logging.exception("Failed to save received data")
         response += "error parsing data"
+
+    if (sender_id == "293400130750143" and False):
+        response += f"prefs:\n"
+        response += f"pref_version:5\n"
+        #response += f"sleep_enabled:1\n"
+        #response += f"sleep_hour_start:20\n"
+        #response += f"sleep_hour_end:5\n"
+        logging.info(f"Sending prefs to {sender_id}. Preferences: {response}")
 
     #response = f"saved: {len(data)}\n"
     #response += f"prefs:\n"
@@ -189,7 +196,7 @@ def wind_station(station_name):
         abort(404, description=f"Cant find station with name '{station_name}'.")
 
     data = {
-        'title': station.get("full_name", ""),
+        'station': station,
         'statusData': db.get_last_status(station_name),
         'windData': db.get_bucketed_data(station_name, duration_hours=6),
         'tempData': db.get_temp(station_name, duration_hours=6),

@@ -1,29 +1,57 @@
 console.log("status_update.js loaded");
 
 
+
 $(function() {
-    getStatus();
+  getStatus();
+
+  $(document).on('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      console.log("visibility visible: calculating new refresh time!");
+    } else {
+      console.log('Tab hidden');
+    }
+  });
 });
+
+let cachedStatusData;
+const pageLoadTime = Date.now();
+
+function siteLoadedLongerThanXMin(mins) {
+  return (Date.now() - pageLoadTime) > mins * 60 * 1000;
+}
 
 function getStatus() {
   if (preloadedStatusData) {
     // if preloadedStatusData exist load that data instead of getting query for it 
     displayStatusData(preloadedStatusData);
+    cachedStatusData = preloadedStatusData;
   } else {
     const base = window.location.pathname;
     $.getJSON(`${base}/data/status.json`, function(data) {
       console.log(data)
       displayStatusData(data);
+      cachedStatusData = data;
     });
   }
 }
 
+let statusDataRefreshTimeout;
 function displayStatusData(data) {
   $('#loading-status-msg').hide();
 
   console.log('Got new status:', data);
-  setStatuionParametersPannel(data);
+  
   updateStatusPannel(data);
+  setStatuionParametersPannel(data);
+
+
+  if(statusDataRefreshTimeout) clearTimeout(statusDataRefreshTimeout);
+
+  statusDataRefreshTimeout = setInterval(()=> {
+      updateStatusPannel(data);
+      setStatuionParametersPannel(data);
+  }, 10*1000); 
 }
 
 function toggleOverlay(type, show) {
@@ -59,10 +87,14 @@ function formattedTime(isoString) {
 
 function isDeviceSleeping() {
   return false;
-  const now = new Date();
-  const hour = now.getHours();
-  // Sleeping between 20:00 and 06:00 
-  return (hour >= 19 || hour < 6);
+  if (window.location.pathname.includes("stol")) {
+    const now = new Date();
+    const hour = now.getHours();
+    // Sleeping between 20:00 and 06:00 
+    return (hour >= 18 || hour < 10);
+  }
+
+  return false;
 }
 
 function updateStatusPannel(data) {
@@ -74,28 +106,31 @@ function updateStatusPannel(data) {
   let titleText = "--";
   let detailsText = "";
   let statusClass = "status-offline"
+
+
   if(timeSinceLastSend < 22) {
-    bubleText = "vse ok"
-    titleText = "Deluje"
+    bubleText = "Deluje"
     statusClass = "status-ok"
   } else if(timeSinceLastSend >= 200) {
-    bubleText = "neodzivna!"
-    titleText = "Napaka"
+    bubleText = "Napaka"
     statusClass = "status-error"
   } else if(timeSinceLastSend >= 22) {
-    bubleText = "zastareli podatki"
-    titleText = "Ni odziva 🤔"
+    bubleText = "Ni odziva 🤔"
     statusClass = "status-non-responsive"
   }
 
+  //if(window.location.pathname.includes("peter")) {
+  //  bubleText = "Začasno Onemogočena";
+  //  statusClass = "status-offline"
+  //}
+
   if(isDeviceSleeping()) {
-    bubleText = "Zzzz Zzzzz..."
-    titleText = "Naprava počiva 😴"
+    bubleText = "Naprava počiva 😴"
     detailsText = `Naprava ne pošilja podatkov med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
     statusClass = "status-sleeping"
   }
 
-  toggleOverlay("sleeping", isDeviceSleeping());
+  //toggleOverlay("sleeping", isDeviceSleeping());
 
   detailsText += `Postaja zadnjič poslala podatke: <b>${time}</b>, pred <b>${timeSinceStr}</b>`;
 
@@ -104,11 +139,19 @@ function updateStatusPannel(data) {
     .addClass(statusClass);
 
   $("#status-bubble-text").text(bubleText);
-  $("#status-title-text").text(titleText);
   $("#status-detailed-text").html(detailsText);
+  
+  console.log("should refresh", timeSinceLastSend > 10, "in:", 10 - timeSinceLastSend, "min");
+  if(timeSinceLastSend > 10 && siteLoadedLongerThanXMin(2)) { // TODO make it so that we recieve the message from the server when we have to reaload on data change 
+    location.reload();
+  }
 }
 
+
 function setStatuionParametersPannel(data) {
+  $('#status-info').html("");
+  $('#status-graphical-info').html("");
+
   const signal = csqToSignalAuto(data["signal"])
   const signalQualityStr = `${signal.quality}, ${signal.dbm} dB`;
 

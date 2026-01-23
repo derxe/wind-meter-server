@@ -9,3 +9,5 @@ lib*
 letsencrypt
 app_dev/__pycache__/*
 app_dev/myenv/*
+mongo_dump/*
+mongo_dump/dump/*

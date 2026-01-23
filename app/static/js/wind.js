@@ -136,12 +136,11 @@ function loadWindData() {
 }
 
 function getWindData() {
-  if(preloadedWindData) {
+  if(preloadedWindData && preloadedWindData.length !== 0) {
     showLoading(false);
     data = preloadedWindData;
     updateWindGraph(data);
     updateDirectionGraph(data);
-
   } else {
     loadWindData();
   }
@@ -174,7 +173,7 @@ function updateGraphUnit() {
 
   if (unit === "kmh") {
     yScale.ticks.callback = (v) => (v * 3.6).toFixed(0) + "";
-    tooltip.label = (ctx) => (ctx.parsed.y * 3.6).toFixed(0) + " km/h";
+    tooltip.label = (ctx) => ctx.dataset.label + ": " + (ctx.parsed.y * 3.6).toFixed(0) + " km/h";
 
     const step = 5;
     msStepSize = yScale.ticks.stepSize;
@@ -183,7 +182,7 @@ function updateGraphUnit() {
     if(def_yScaleTicksCallback) yScale.ticks.callback = def_yScaleTicksCallback;
     else yScale.ticks.callback = (v) => v.toFixed(0) + "";
 
-    tooltip.label = (ctx) => ctx.parsed.y.toFixed(1) + " m/s";
+    tooltip.label = (ctx) => ctx.dataset.label + ": " + ctx.parsed.y.toFixed(1) + " m/s";
 
     yScale.ticks.stepSize = msStepSize;
   }
@@ -192,7 +191,50 @@ function updateGraphUnit() {
   windChart.update();
 }
 
+const verticalLinePlugin = {
+  id: 'verticalLine',
+  beforeDatasetsDraw(chart) {
+    const { ctx, tooltip, chartArea } = chart;
 
+    if (!tooltip || !tooltip._active || tooltip._active.length === 0) return;
+
+    const x = tooltip._active[0].element.x;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(130,144,165, 0.5)';
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+Chart.Tooltip.positioners.topFixed = function (items, eventPosition) {
+  if (!items.length) return false;
+
+  const chart = this.chart;
+  const x = items[0].element.x;
+
+  return {
+    x: x,
+    y: chart.chartArea.top + 50 // padding from top
+  };
+};
+
+function formattedDate(isoString) {
+  if (!isoString) return "--";
+
+  const d = new Date(isoString);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+
+  return `${dd}.${mm}.${yy} - ${hh}:${min}`;
+}
 
 let windChart;
 let lastAvgValue;
@@ -222,9 +264,6 @@ function updateWindGraph(data) {
 
     return (endX - startX) / 3600000;   // ms → hours
   }
-
-
-
   const dataDuration = getDurationHours(avgGrid);
   
   console.log("avgGrid", avgGrid)
@@ -270,6 +309,11 @@ function updateWindGraph(data) {
         ]
         },
         options: {
+          interaction: {
+            mode: 'index',      
+            intersect: false,   
+            axis: 'x',          
+          },
           animation: {
               duration: 0
           },
@@ -278,6 +322,12 @@ function updateWindGraph(data) {
               display: false,
               position: 'bottom',
               labels: { usePointStyle: true, padding: 12 }
+            },
+            tooltip: {
+              position: 'topFixed',
+              callbacks: {
+                title: (items) => formattedDate(items[0].parsed.x)
+              }
             }
           },
           responsive: true,
@@ -285,7 +335,7 @@ function updateWindGraph(data) {
           parsing: false,           // we already provide {x,y}
           normalized: true,         // better perf for time scale
           scales: {
-              x: {
+              /*x: {
                 type: 'time',
                 time: { 
                   displayFormats: { minute: 'HH:mm' },
@@ -293,10 +343,19 @@ function updateWindGraph(data) {
                 ticks: {
                   callback: (val) => {
                     const d = new Date(val);
+                    console.log("windgraph:", val, d.getMinutes() % 60 != 0);
                     if(d.getMinutes() % 60 != 0) return null; // display only timestamps each 30 minutes 
                     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                   },
-                },
+                },*/
+              x: {
+                type: 'time',
+                time: {
+                  unit: 'hour',
+                  displayFormats: {
+                    hour: 'HH:mm'
+                  }
+                }
               },
               y: {
                   beginAtZero: true,
@@ -304,20 +363,24 @@ function updateWindGraph(data) {
               },
           }
         },
+        plugins: [verticalLinePlugin],
         //plugins: [midnightLinesPlugin]
     });
+
+
   }
 
   windChart.data.datasets[0].data = avgGrid;
   windChart.data.datasets[1].data = maxGrid;
 
-  // dont show line if there is too much data
+  // dont connect the data points "with the line" if there is too much data
   let showLine = dataDuration < 5*(24) 
   windChart.data.datasets[0].showLine = showLine;  
   windChart.data.datasets[1].showLine = showLine; 
 
   windChart.options.scales.y.max = yAxisMax;
 
+  updateGraphUnit();
   windChart.update();   
 }
 
@@ -364,37 +427,63 @@ function updateDirectionGraph(data) {
           ]
           },
           options: {
+            interaction: {
+              mode: 'index',      
+              intersect: false,   
+              axis: 'x',          
+            },
             animation: {
               duration: 0
             },
             plugins: {
-                legend: {
-                    position: 'bottom',        
-                    align: 'center',
-                    labels: { usePointStyle: true, padding: 12 }
-                },
-                datalabels: {
-                  anchor: 'end',        // position at end (top)
-                  align: 'top',         // align label above bar
-                  color: '#333',
-                  font: {
-                    weight: 'bold',
-                    size: 10
+              tooltip: {
+                position: 'topFixed',
+                callbacks: {
+                  label(ctx) {
+                    const value = ctx.parsed.y;
+                    return `${ctx.dataset.label}: ${dirFullNames[value]}`;
                   },
-                  formatter: function(value, context) {
-                    if (context.datasetIndex != 0) return ""; // dont display the label for scatter plot points
-                    return directions[value.y]
-                  }
-                },
-                legend: {
-                  display: false
+                  title: (items) => formattedDate(items[0].parsed.x)
                 }
+              },
+              legend: {
+                  position: 'bottom',        
+                  align: 'center',
+                  labels: { usePointStyle: true, padding: 12 }
+              },
+              datalabels: {
+                anchor: 'end',        // position at end (top)
+                align: 'top',         // align label above bar
+                color: '#333',
+                font: {
+                  weight: 'bold',
+                  size: 10
+                },
+                formatter: function(value, context) {
+                  if (context.datasetIndex != 0) return ""; // dont display the label for scatter plot points
+                  return directions[value.y]
+                }
+              },
+              legend: {
+                display: false
+              }
             },
             responsive: true,
             maintainAspectRatio: false,
             parsing: false,           // we already provide {x,y}
             normalized: true,         // better perf for time scale
             scales: {
+                x: {
+                  type: 'time',
+                  offset: false,
+                  time: {
+                    unit: 'hour',
+                    displayFormats: {
+                      hour: 'HH:mm'
+                    }
+                  }
+                },
+                /*
                 x: {
                   type: 'time',
                   offset: false,
@@ -408,9 +497,9 @@ function updateDirectionGraph(data) {
                       return d.toLocaleTimeString([], { hour: '2-digit',minute: '2-digit',hour12: false });
                     }
                   },
-                  min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
-                  max: Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2,
-                },
+                  //min: Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2,
+                  //max: Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2,
+                },*/
                 y: {
                     beginAtZero: true,
                     position: 'left',
@@ -424,7 +513,7 @@ function updateDirectionGraph(data) {
                 },
             }
           },
-          plugins: [ChartDataLabels]
+          plugins: [ChartDataLabels, verticalLinePlugin]
       });
   }
 

@@ -116,7 +116,7 @@ services:
     build: ./app
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
-      - DB_CLIENT_NAME=weather_station_dev_v2
+      - DB_CLIENT_NAME=weather_station
     volumes:
       - ./app:/app:rw
     # No public ports; only Nginx talks to Flask
@@ -128,7 +128,7 @@ services:
     build: ./app_dev
     environment:
       - MONGO_URI=mongodb://admin:3SOWk2YyRtBOkP5wVmnw@mongo:27017
-      - DB_CLIENT_NAME=weather_station_dev_v2
+      - DB_CLIENT_NAME=weather_station_dev
     volumes:
       - ./app_dev:/app:rw
     # No public ports; only Nginx talks to Flask
@@ -153,15 +153,22 @@ services:
     depends_on:
       - mongo
     ports:
-      - "127.0.0.1:8081:8081"    # Mongo Express only on localhost
+      - "49167:8081"
     environment:
       ME_CONFIG_MONGODB_SERVER: mongo
       ME_CONFIG_MONGODB_PORT: 27017
       ME_CONFIG_MONGODB_ADMINUSERNAME: admin
       ME_CONFIG_MONGODB_ADMINPASSWORD: 3SOWk2YyRtBOkP5wVmnw
-      ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: admin
+      ME_CONFIG_BASICAUTH_USERNAME: admintone
+      ME_CONFIG_BASICAUTH_PASSWORD: qwe.123
     restart: always
+    #labels:
+    #  - traefik.enable=true
+    #  - traefik.http.routers.mongoexpress.rule=Host(`conf.to-ni.dev`)
+    #  - traefik.http.routers.mongoexpress.entrypoints=websecure
+    #  - traefik.http.routers.mongoexpress.tls=true
+    #  - traefik.http.routers.mongoexpress.tls.certresolver=letsencrypt
+    #  - traefik.http.services.mongoexpress.loadbalancer.server.port=8081
 
   grafana:
     image: grafana/grafana:latest

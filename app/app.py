@@ -98,6 +98,26 @@ def list_stations():
     logging.info(f"Data to send: {data}")
     return render_template("station_list.html", data=data)
 
+def get_prefs_for_response(station_name):
+    prefs = db.get_prefs_to_send(station_name)
+
+    if not prefs:
+        return ""
+    
+    if not prefs["confirmSendPrefs"]:
+        # preferences are not confirmed / set, to be send to the device
+        return ""
+    
+    prefs_raw = prefs["prefs"].replace("\\n", "\n")
+
+    logging.info("Sending preferences to '%s'. Prefs:%s", station_name, prefs_raw)
+
+    prefs["date_sent"] = datetime.now(ZoneInfo("Europe/Berlin"))
+    prefs["confirmSendPrefs"] = False # disable so they are not send again
+    db.save_prefs_to_send(station_name, prefs)
+
+    return prefs_raw
+
 @app.route("/save/<sender_id>", methods=["GET", "POST"])
 def save_data_sender_id(sender_id):
     ip = request.remote_addr
@@ -115,21 +135,40 @@ def save_data_sender_id(sender_id):
 
     response = f"saved: {len(data)}\n"
 
-    file_logs.save_query_to_log(sender_id, data) 
+    file_logs.save_query_to_log(sender_id, data)
+
+    station = db.get_or_create_station(sender_id)
+    if station is None:
+        abort(400, description="no sender_id/imsi not saving data.")
+
+    logging.info(f"Got station: '{station}'")
     try:
-        db.save_recived_data(data, sender_id, datetime.now(ZoneInfo("Europe/Berlin")))
+        db.save_recived_data(data, station, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         #logging.error(f"[ERROR] Failed to save received data: {e}", e)
         logging.exception("Failed to save received data")
         response += "error parsing data"
 
-    if (sender_id == "293400130750143" and False):
-        response += f"prefs:\n"
-        response += f"pref_version:5\n"
-        #response += f"sleep_enabled:1\n"
-        #response += f"sleep_hour_start:20\n"
-        #response += f"sleep_hour_end:5\n"
-        logging.info(f"Sending prefs to {sender_id}. Preferences: {response}")
+    #if sender_id == "293400130736647":
+    response += get_prefs_for_response(station["name"])
+
+    #if sender_id == "293400130750143":
+    #    
+    #   response += get_prefs_for_response(station["name"])
+        
+    """
+    response += prefs[""]
+    response += "prefs:\n"
+    response += "pref_version:9\n"
+
+    response += "creg_timeout_s:30\n"
+    response += "send_data_interval:10\n"
+    response += "n_send_retries:2\n"
+
+    response += "sleep_enabled:1\n"
+    response += "sleep_hour_start:17\n"
+    response += "sleep_hour_end:6\n"
+    """
 
     #response = f"saved: {len(data)}\n"
     #response += f"prefs:\n"
@@ -189,6 +228,7 @@ def wind_data_all(station_name):
 
     return data
 
+
 @app.route("/<station_name>", methods=["GET"])
 def wind_station(station_name):
     station = db.get_station_with_name(station_name)
@@ -218,6 +258,39 @@ def wind_station_info(station_name):
     return render_template("info.html", **data)
 
 
+@app.route("/<station_name>/config", methods=["GET"])
+def wind_station_config(station_name):
+    station = db.get_station_with_name(station_name)
+    if station_name is None:
+        abort(404, description=f"Cant find station with name '{station_name}'.")
+
+    data = {
+        'title': station["full_name"],
+        'station': station,
+        'prefs': db.get_prefs_to_send(station_name),
+        'statusData': db.get_last_status(station_name),
+    }
+    return render_template("config.html", **data)
+
+
+@app.route("/<station_name>/config/set_prefs.json", methods=["POST"])
+def set_prefs(station_name):
+    data = request.get_json(silent=True)  # returns dict/list or None
+
+    if data is None:
+        raw = request.get_data(cache=False, as_text=True)
+        logging.warning("Invalid/missing JSON. content_type=%s raw=%r",
+                        request.content_type, raw[:500])
+        return jsonify({"ok": False, "error": "Expected JSON body"}), 400
+
+    logging.info("Station=%s prefs=%s", station_name, data)
+
+    db.save_prefs_to_send(station_name, data)
+
+    return "OK: " + str(db.get_prefs_to_send(station_name))
+
+
+
 @app.route("/log", methods=["GET"])
 def get_log_list():
     """
@@ -244,6 +317,7 @@ def get_log(log_name):
         log_content = file_logs.get_n_lines(filepath, n_lines)
         
     return Response(log_content, mimetype="text/plain")
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

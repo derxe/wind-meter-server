@@ -40,13 +40,27 @@ function getTempData() {
   } else {
     loadTempData();
   }
+}
 
+function formattedDate(isoString) {
+  if (!isoString) return "--";
+
+  const d = new Date(isoString);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+
+  return `${dd}.${mm}.${yy} - ${hh}:${min}`;
 }
 
 
 let tempChart;
+let maxTemp;
+let minTemp;
 function updateTempGraph(data) {
-  if(data.length == 0) return;
+  if(data.length === 0) return;
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   const tempData = data
@@ -65,14 +79,16 @@ function updateTempGraph(data) {
           .filter(d => d.hum_in != null)
           .map(d => ({ x: new Date(d.timestamp).getTime(), y: d.hum_in }));
   
+  if(tempData.length === 0) return; // in the case that all the values are null
+  if(humData.length === 0) return; 
 
   const lastTemp = tempData[tempData.length-1].y;
   const lastHum  = humData[humData.length-1].y;
   $("#temp-value").text((lastTemp).toFixed(1));
   $("#hum-value").text((lastHum).toFixed(0));
  
-  let maxTemp = Math.max(...tempData.map(p => p.y));
-  let minTemp = Math.min(...tempData.map(p => p.y));
+  maxTemp = Math.max(...tempData.map(p => p.y));
+  minTemp = Math.min(...tempData.map(p => p.y));
   let diffTemp = maxTemp - minTemp;
   const roundUp5 = v => Math.ceil(v / 5) * 5;
   const roundDown5 = v => Math.floor(v / 5) * 5;
@@ -151,8 +167,19 @@ function updateTempGraph(data) {
       ]
     },
     options: {
+      interaction: {
+        mode: 'index',      
+        intersect: false,   
+        axis: 'x',          
+      },
       animation: { duration: 0 },
       plugins: {
+        tooltip: {
+          position: 'topFixed',
+          callbacks: {
+            title: (items) => formattedDate(items[0].parsed.x)
+          }
+        },
         legend: {
           display: true,
           position: 'bottom',
@@ -163,6 +190,22 @@ function updateTempGraph(data) {
               const ds = chart.datasets[legendItem.datasetIndex];
               return Array.isArray(ds.data) && ds.data.length > 0;
             }
+          },
+          onClick: (e, legendItem, legend) => {
+            const chart = legend.chart;
+            const index = legendItem.datasetIndex;
+            if(index === 2) {
+              // we are toggeling "zunanja temperatura", if shown dont use the caluclate min/max tempertura range
+              if(legendItem.hidden === true) {
+                chart.options.scales.yTemp.min = undefined;
+                chart.options.scales.yTemp.max = undefined;
+              } else {
+                chart.options.scales.yTemp.min = minTemp;
+                chart.options.scales.yTemp.max = maxTemp;
+              }
+            }
+            
+            Chart.defaults.plugins.legend.onClick(e, legendItem, legend);
           }
         }
       },
@@ -206,9 +249,11 @@ function updateTempGraph(data) {
           grid: { drawOnChartArea: false }, // no grid overlap
         }
       }
-    }
+    },
+    plugins: [verticalLinePlugin],
   });
 }
+
 
   tempChart.options.scales.yTemp.min = minTemp;
   tempChart.options.scales.yTemp.max = maxTemp;

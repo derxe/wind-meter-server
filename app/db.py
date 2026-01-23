@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, time, timedelta
 import json
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 import os
 import sys
 import logging 
@@ -22,7 +22,7 @@ if "MONGO_URI" not in os.environ:
 
 logging.info(str(os.environ))
 DB_URL = os.environ.get("MONGO_URI", "mongodb://admin:3SOWk2YyRtBOkP5wVmnw@localhost:27017")
-DB_CLIENT_NAME = "weather_station_dev_v2" # os.environ.get("DB_CLIENT_NAME", "weather_station_dev2_v2")
+DB_CLIENT_NAME = os.environ.get("DB_CLIENT_NAME", "weather_station")
 if DB_CLIENT_NAME is None:
     raise ValueError("Unable to get DB_CLIENT_NAME from environment. Cant run db.py")
 
@@ -37,6 +37,27 @@ db = client[DB_CLIENT_NAME]
 # wind speed conversion between RPMs measured to m/s 
 DEF_SPEED_RPM_TO_MS = 0.33/3.6  # 0.091667
 
+
+def get_or_create_station(sender_id_imsi):
+    if not sender_id_imsi:
+        logging.warning("No IMSI to save")
+        return None
+
+    station_defaults = {
+        "imsi": sender_id_imsi,
+        "name": f"unnamed_{sender_id_imsi}", 
+        "full_name": f"{sender_id_imsi}",
+        "created_on": datetime.now(TZ),
+    }
+    station = db.stations.find_one_and_update(
+        {"imsi": sender_id_imsi},
+        {"$setOnInsert": station_defaults}, # insert default values if the imsi doesnt exist in DB
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+        projection={"_id": 0},
+    )
+
+    return station
 
 def get_stations():
     return list(db.stations.find({},{"_id": 0}))
@@ -72,6 +93,18 @@ def get_station_speed_to_rpm(station_name):
         return DEF_SPEED_RPM_TO_MS
     
     return station["rpm_to_ms"]
+
+
+def get_prefs_to_send(station_name):
+    return db.prefs.find_one({"_id": station_name})
+
+def save_prefs_to_send(station_name, prefs):
+    db.prefs.update_one(
+        {"_id": station_name},
+        {"$set": prefs},
+        upsert=True
+    )
+
 
 
 ERROR_CODE_MAP_V4 = {
@@ -396,21 +429,10 @@ def get_station(imsi):
     return device
 
 
-def save_recived_data(line, sender_id_imsi, timestamp):
+def save_recived_data(line, station, timestamp):
     if not line or not timestamp:
         logging.warning("No line or timestamp to save")
         return
-
-    # todo check if this code is logically constistant and if it should work 
-    station = get_station(sender_id_imsi)
-    if station is None:
-        add_station({
-            "imsi": sender_id_imsi,
-            "name": f"unnamed_{sender_id_imsi}",
-            "full_name": f"{sender_id_imsi}",
-            "created_on": datetime.now(TZ)
-        })
-        station = get_station(sender_id_imsi)
 
     station_name = station["name"]
 
@@ -1306,7 +1328,7 @@ if __name__ == "__main__":
     
     create_average_wind_values(station_name)
     create_average_dir_values(station_name)
-    """
+
 
     result = db.statuses.update_many(
         {
@@ -1325,7 +1347,7 @@ if __name__ == "__main__":
     )
 
     print("matched: ", result.matched_count, "modified:", result.modified_count)
-
+    """
 
 
 
@@ -1339,6 +1361,12 @@ if __name__ == "__main__":
     #            logging.exception("Failed to save received data")
     #        print(".", end="", flush=True)
 
+    result = db.statuses.update_many(
+        {"station_name": "unnamed_293400130736647"},
+        {"$set": {"station_name": "testna1"}}
+    )
+
+    print("matched / modified count:", result.matched_count, result.modified_count)
 
     print("Devices: ", get_stations())
     print("Number of statuses:", db.statuses.count_documents({}))
@@ -1349,6 +1377,5 @@ if __name__ == "__main__":
 
     #print("Parsed Status Update:")
     #print(json.dumps(parse_status_update(line), indent=2))
-
 
 

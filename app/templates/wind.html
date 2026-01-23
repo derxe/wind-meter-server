@@ -17,6 +17,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="static/js/shared.js"></script>
   <script src="static/js/wind_rose.js"></script>
   <script src="static/js/status_update.js"></script>
   <script src="static/js/wind.js"></script>
@@ -281,7 +282,7 @@
 <body class="min-h-screen bg-indigo-50 text-slate-900" style="min-width:440px"> <!-- bg-sky-100 -->
 
 
-  <div id="header" class="status-ok">
+  <div id="header" class="">
     <div class="relative bg-white" >
     <div class="relative" >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
@@ -317,7 +318,7 @@
         <div class="flex items-center gap-2 ml-">
           <span class="status-badge inline-flex items-center gap-1 rounded-lg text-xs px-2 py-0.5 border">
             <span class="status-dot w-1.5 h-1.5 rounded-full"></span>
-            <span id="status-title-text" class="pl-[2px] whitespace-nowrap">
+            <span id="status-bubble-text" class="pl-[2px] whitespace-nowrap">
               Deluje
             </span>
           </span>
@@ -501,7 +502,7 @@
           </div>
         </div>
 
-        <div class="temp-chart-holder chart-holder relative w-full md:h-[25rem] h-60 ">
+        <div class="temp-chart-holder chart-holder relative w-full md:h-[25rem] h-[20rem]">
           {{ loading_overlay() }}
 
           <canvas id="temp-chart" class="absolute inset-0 w-full h-full"></canvas>
@@ -641,16 +642,24 @@
           Pokaži več podrobnosti
         </button>
 
+        <!--
+        <button onclick="window.location.href = window.location.pathname + '/config'" class="px-3 py-1 mt-2 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
+          Configure
+        </button>-->
+
       </div>
 
-
+      {% if station.location %}
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
+        
         <h3 id="double-click-show-detailed"
             class="font-semibold mb-3 select-none">
           Lokacija
         </h3>
 
         <div class="flex flex-col gap-2 text-sm text-slate-700">
+
+
           <!-- Location name -->
           <div class="flex items-center gap-2">
             <span class="text-slate-500">Kje:</span>
@@ -688,12 +697,13 @@
           </a>
         </div>
       </div>
+      {% endif %}
 
     </aside>
   </main>
 
   <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
-    © 2025 Paraglidng Wind Station · Built with ❤️ for paragliding 🪂
+    © 2025 Paragliding Wind Station · Built with ❤️ for paragliding 🪂
   </footer>
 </body>
 </html>

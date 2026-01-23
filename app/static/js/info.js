@@ -385,6 +385,38 @@ function showNewGraphY2(dataKey, dataName) {
   showGraph("y2");
 }
 
+const verticalLinePlugin = {
+  id: 'verticalLine',
+  beforeDatasetsDraw(chart) {
+    const { ctx, tooltip, chartArea } = chart;
+
+    if (!tooltip || !tooltip._active || tooltip._active.length === 0) return;
+
+    const x = tooltip._active[0].element.x;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(130,144,165, 0.5)';
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+Chart.Tooltip.positioners.topFixed = function (items, eventPosition) {
+  if (!items.length) return false;
+
+  const chart = this.chart;
+  const x = items[0].element.x;
+
+  return {
+    x: x,
+    y: chart.chartArea.top + 50 // padding from top
+  };
+};
+
 
 let chart;
 function drawGraph(data, dataName, axis) {
@@ -426,6 +458,11 @@ function drawGraph(data, dataName, axis) {
         ]
         },
         options: {
+          interaction: {
+            mode: 'index',      
+            intersect: false,   
+            axis: 'x',          
+          },
           animation: {
               duration: 0
           },
@@ -435,6 +472,9 @@ function drawGraph(data, dataName, axis) {
                   position: 'bottom',      
                   align: 'center',
                   labels: { usePointStyle: true, padding: 12 }
+              },
+              tooltip: {
+                position: 'topFixed'
               }
           },
           responsive: true,
@@ -462,7 +502,8 @@ function drawGraph(data, dataName, axis) {
                 position: 'right',
               }
           }
-        }
+        },
+        plugins: [verticalLinePlugin],
     });
   }
 

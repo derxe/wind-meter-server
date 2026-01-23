@@ -24,6 +24,18 @@ Compress(app)
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
 
+
+@app.route("/save_raw/<sender_id>", methods=["POST"])
+def save_raw_data(sender_id):
+    ip = request.remote_addr
+    print(f"Saving raw data from: {sender_id}. From ip: {ip}")
+
+    data = request.get_data(as_text=True)
+    file_logs.save_query_to_log(sender_id, data)
+    
+    response = f"saved: {len(data)}\n"
+    return Response(response, mimetype="text/plain")
+
 @app.route("/save_error/<sender_id>", methods=["POST"])
 def save_error_codes_sender_id(sender_id):
     ip = request.remote_addr

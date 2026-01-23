@@ -91,7 +91,7 @@ def get_n_lines(file_name, n):
             # Use negative slicing [-n:] to get the last N lines.
             # We join with "" because readlines() preserves the original newline characters.
             last_n_lines = []
-            for i in range(1, min(n, len(all_lines))):
+            for i in range(0, min(n, len(all_lines))):
                 last_n_lines.append(str(i) + " " + all_lines[-i])
             
         # Join the list of lines back into a single string

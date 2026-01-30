@@ -11,7 +11,7 @@ $(function() {
       console.log("Display duration:", displayDuration);
       loadWindData();
     });
-    getWindData();
+    showPreloadedData();
 
     onToggleButtons("toggle-buttons-speed", (selectedValue) => {
       unit = selectedValue;
@@ -112,6 +112,8 @@ function onToggleButtons(id, listener) {
 function showLoading(isLoading) {
   if(isLoading) {
     $('#loading-msg').show();
+    $('#wind-no-data-to-show').hide();
+    $('#dir-no-data-to-show').hide();
     $('#wind-chart').hide();
     $('#dir-chart').hide();
     $('.data-loading').removeClass('hidden').attr('aria-busy', 'true');
@@ -123,29 +125,23 @@ function showLoading(isLoading) {
   }
 }
 
+
 function loadWindData() {
     showLoading(true);
     const base = window.location.pathname;
     $.getJSON(`${base}/data/wind.json?duration=${displayDuration}`, function(data) {
         showLoading(false);
-
-        console.log('Wind data loaded:', data);
         updateWindGraph(data);
         updateDirectionGraph(data);
     });
 }
 
-function getWindData() {
-  if(preloadedWindData && preloadedWindData.length !== 0) {
-    showLoading(false);
-    data = preloadedWindData;
-    updateWindGraph(data);
-    updateDirectionGraph(data);
-  } else {
-    loadWindData();
-  }
+function showPreloadedData() {
+  showLoading(false);
 
-
+  data = preloadedWindData;
+  updateWindGraph(data);
+  updateDirectionGraph(data);
 }
 
 function updateMaxAvgUnit() {
@@ -240,7 +236,14 @@ let windChart;
 let lastAvgValue;
 let lastMaxValue;
 function updateWindGraph(data) {
-  if(data.length == 0) return;
+  if (data.length === 0 ) {
+    $('#wind-no-data-to-show').show();
+    $('#wind-chart').hide();
+    return;
+  } 
+
+  $('#wind-no-data-to-show').hide();
+  $('#wind-chart').show();
 
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const avgGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.avg}));
@@ -380,13 +383,28 @@ function updateWindGraph(data) {
 
   windChart.options.scales.y.max = yAxisMax;
 
+  // set max X axis to the current date if the data is older then 20 minutes
+  let maxDate = Math.max(...avgGrid.map(p => p.x));
+  if(Date.now() - maxDate > 20*60*1000) {
+    windChart.options.scales.x.max = Date.now();
+  }
+
+
   updateGraphUnit();
   windChart.update();   
 }
 
 let dirChart;
 function updateDirectionGraph(data) {
-    if(data.length == 0) return;
+    if (data.length === 0 ) {
+      $('#dir-no-data-to-show').show();
+      $('#dir-chart').hide();
+      return;
+    } 
+
+    $('#dir-no-data-to-show').hide();
+    $('#dir-chart').show();
+
     // const dirPointsRaw = dir.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
 
     const dirGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.dir }));
@@ -518,9 +536,15 @@ function updateDirectionGraph(data) {
   }
 
   dirChart.data.datasets[0].data = dirGrid;
-  dirChart.options.scales.x.min = Math.min(...dirGrid.map(p => p.x)) - barWidthMs / 2;
-  dirChart.options.scales.x.max = Math.max(...dirGrid.map(p => p.x)) + barWidthMs / 2;
+  let minDate = Math.min(...dirGrid.map(p => p.x));
+  let maxDate = Math.max(...dirGrid.map(p => p.x));
 
+  // set max X axis to the current date if the data is older then 20 minutes
+  if(Date.now() - maxDate > 20*60*1000) {
+    maxDate = Date.now();
+  }
+  dirChart.options.scales.x.min = minDate - barWidthMs / 2;
+  dirChart.options.scales.x.max = maxDate + barWidthMs / 2;
   //dirChart.data.datasets[1].data = dirPointsRaw;
   dirChart.update();
 }

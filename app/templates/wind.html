@@ -1,4 +1,4 @@
-{% from '_flask_macros.html' import sleep_overlay, loading_overlay %}
+{% from '_flask_macros.html' import sleep_overlay, loading_overlay, no_data_to_show_overlay %}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -419,6 +419,7 @@
         
         <div class="chart-holder relative w-full md:h-[25rem] h-60 ">
           {{ loading_overlay() }}
+          {{ no_data_to_show_overlay("wind-no-data-to-show") }}
 
           <canvas id="wind-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
@@ -461,6 +462,7 @@
         </div>
         <div class="chart-holder relative w-full md:h-[25rem] h-60 ">
           {{ loading_overlay() }}
+          {{ no_data_to_show_overlay("dir-no-data-to-show") }}
 
           <canvas id="dir-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>
@@ -504,6 +506,7 @@
 
         <div class="temp-chart-holder chart-holder relative w-full md:h-[25rem] h-[20rem]">
           {{ loading_overlay() }}
+          {{ no_data_to_show_overlay("temp-no-data-to-show") }}
 
           <canvas id="temp-chart" class="absolute inset-0 w-full h-full"></canvas>
         </div>

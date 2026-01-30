@@ -7,7 +7,7 @@ $(function() {
       console.log("Display duration temperature:", displayDuration);
       loadTempData();
     });
-    getTempData();
+    showInitialTempData();
 });
 
 
@@ -23,23 +23,19 @@ function showLoadingTemp(isLoading) {
 }
 
 function loadTempData() {
-    showLoadingTemp(true);
-    const base = window.location.pathname;
-    $.getJSON(`${base}/data/temp.json?duration=${displayDuration}`, function(data) {
-        showLoadingTemp(false);
+  showLoadingTemp(true);
+  const base = window.location.pathname;
+  $.getJSON(`${base}/data/temp.json?duration=${displayDuration}`, function(data) {
+      showLoadingTemp(false);
 
-        console.log('Temperature data loaded:', data);
-        updateTempGraph(data);
-    });
+      console.log('Temperature data loaded:', data);
+      updateTempGraph(data);
+  });
 }
 
-function getTempData() {
-  if(preloadedTempData) {
-    showLoadingTemp(false);
-    updateTempGraph(preloadedTempData);
-  } else {
-    loadTempData();
-  }
+function showInitialTempData() {
+  showLoadingTemp(false);
+  updateTempGraph(preloadedTempData);
 }
 
 function formattedDate(isoString) {
@@ -60,7 +56,15 @@ let tempChart;
 let maxTemp;
 let minTemp;
 function updateTempGraph(data) {
-  if(data.length === 0) return;
+  if (data.length === 0 ) {
+    $('#temp-no-data-to-show').removeClass('hidden');
+    $('#temp-chart-holder').addClass('hidden');
+    return;
+  } 
+    
+  $('#temp-no-data-to-show').addClass('hidden');
+  $('#temp-chart-holder').removeClass('hidden');
+
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   const tempData = data

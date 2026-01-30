@@ -643,7 +643,6 @@ def get_wind(station_name, duration_hours: int = 6):
     end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
     start_time = end_time - timedelta(hours=duration_hours)
 
-    logging.info(f"Getting wind for station_name:{station_name} from:{start_time} to:{end_time}")
     cursor = db.winds.find(
         {
          "timestamp": {"$gte": start_time, "$lte": end_time},
@@ -683,23 +682,14 @@ def get_directions(station_name, duration_hours=6):
     return data
 
 def get_temp(station_name, duration_hours=6):
-    logging.info(f"Fetching temerature and humidity data from the lsat {duration_hours} hours")
+    logging.info(f"Fetching temperature and humidity data from the last {duration_hours} hours")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
     
-    cursor = db.statuses.find(
-        {"station_name": {"$eq": station_name}},
-        {"_id": 0}
-    ).sort("timestamp", -1).limit(1)
-    
-    last_status = next(cursor, None)
-    if last_status is None:
-        return []
-
-    start_time = last_status["timestamp"] - timedelta(hours=duration_hours)
     temp_hum_data = list(db.statuses.find(
-        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}}, 
-        {"_id":0, "temp":1, "hum":1, "temp_in":1, "hum_in":1, "timestamp":1}
-        ).sort("timestamp", 1))
-    
+        {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}},
+        {"_id": 0, "temp": 1, "hum": 1, "temp_in": 1, "hum_in": 1, "timestamp": 1}
+    ).sort("timestamp", 1))
+
     if len(temp_hum_data) == 0:
         return []
     
@@ -731,16 +721,8 @@ def get_temp(station_name, duration_hours=6):
 
 
 def get_bucketed_data(station_name, duration_hours=6):
-    logging.info(f"Fetching bucketed data from the lsat {duration_hours} hours")
-    latest = db.wind_bucketed.find_one(
-        {"station_name": {"$eq": station_name}}, 
-        {"timestamp": 1, "_id": 0},
-        sort=[("timestamp", -1)]
-    )
-    if not latest or "timestamp" not in latest:
-        return []   # no data in DB
-
-    start_time = latest["timestamp"] - timedelta(hours=duration_hours)
+    logging.info(f"Fetching bucketed data from the last {duration_hours} hours")
+    start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
 
     # --- fetch data ---
     winds = list(db.wind_bucketed.find(
@@ -776,6 +758,8 @@ def get_bucketed_data(station_name, duration_hours=6):
 def get_wind_bucketed(station_name, duration_hours=6):
     logging.info(f"Fetching bucketed wind data from the lsat {duration_hours} hours")
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
+    
+    logging.info(f"Get wind bucketed from: {start_time} {start_time.astimezone(TZ).isoformat()}")
     
     cursor = db.wind_bucketed.find(
         {"timestamp": {"$gte": start_time}, "station_name": {"$eq": station_name}},

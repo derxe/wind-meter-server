@@ -119,10 +119,10 @@ function updateStatusPannel(data) {
     statusClass = "status-non-responsive"
   }
 
-  //if(window.location.pathname.includes("peter")) {
-  //  bubleText = "Začasno Onemogočena";
-  //  statusClass = "status-offline"
-  //}
+  if(stationData && stationData["status"] === "offline") {
+    bubleText = "Začasno Onemogočena";
+    statusClass = "status-offline"
+  }
 
   if(isDeviceSleeping()) {
     bubleText = "Naprava počiva 😴"
@@ -238,12 +238,14 @@ function displayStatusBar(name, value, precantage, color) {
 
 function batteryVoltageToProcentage(voltageStr) {
   const minVoltage = 3.5;
-  const maxVoltage = 4.2;
+  const maxVoltage = 4.1;
   const voltage = parseFloat(voltageStr);
   if (isNaN(voltage)) return 0;
 
+  const ACCURACY_CHANGE = 15; // procents increase for some percentage in order to be more "accurate" im too lazy to impment accurate function for the discharging curve 
+
   // Normalize to 0–1 range
-  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100 + ACCURACY_CHANGE;
 
   // Clamp to 0–100 range
   percent = Math.min(Math.max(percent, 0), 100);

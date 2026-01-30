@@ -681,7 +681,7 @@ function displayRawLogs(rawLogsText) {
   // Append each line inside its own <div>
   lines.forEach((line, i) => {
     // create on click that calls rawLogClicked(${i} )
-    htmlLine = `<div class="mb-2 px-2 py-1 rounded cursor-pointer hover:bg-slate-200/60" onclick="rawLogClicked(${i})">${line}</div>`;
+    htmlLine = `<div class="mb-2 px-2 py-1 rounded cursor-pointer hover:bg-slate-200/60">${line}</div>`;
     container.append(htmlLine);
   });
 }
@@ -839,12 +839,14 @@ function displayStatusBar(name, value, precantage, color) {
 
 function batteryVoltageToProcentage(voltageStr) {
   const minVoltage = 3.5;
-  const maxVoltage = 4.2;
+  const maxVoltage = 4.1;
   const voltage = parseFloat(voltageStr);
   if (isNaN(voltage)) return 0;
+_
+  const ACCURACY_CHANGE = 15; // procents increase for some percentage in order to be more "accurate" im too lazy to impment accurate function for the discharging curve 
 
   // Normalize to 0–1 range
-  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100 + ACCURACY_CHANGE; 
 
   // Clamp to 0–100 range
   percent = Math.min(Math.max(percent, 0), 100);
@@ -858,11 +860,11 @@ function formattedDate(isoString) {
   const d = new Date(isoString);
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yy = String(d.getFullYear() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).padStart(2, "0");
   const hh = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
 
-  return `${hh}:${min} ${dd}.${mm}.${yy}`;
+  return `${yy}.${mm}.${dd} ${hh}:${min}`;
 }
 
 function timeSinceMinutes(isoString) {

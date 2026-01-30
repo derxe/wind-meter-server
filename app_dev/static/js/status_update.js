@@ -194,7 +194,7 @@ function displayStatusBar(name, value, precantage, color) {
 
 function batteryVoltageToProcentage(voltageStr) {
   const minVoltage = 3.5;
-  const maxVoltage = 4.2;
+  const maxVoltage = 4.1;
   const voltage = parseFloat(voltageStr);
   if (isNaN(voltage)) return 0;
 

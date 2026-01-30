@@ -140,6 +140,7 @@ function loadRawLogs() {
   }
 }
 
+
 function displayStatuses(data) {
   $("#logs-value").empty().hide();
   const container = $("#errors-value");
@@ -163,6 +164,13 @@ function displayStatuses(data) {
       entry.dur_minutes = (t0 - t1) / 60000;
     } else {
       entry.dur_minutes = null;
+    }
+  });
+
+
+  data.forEach((entry, i) => {
+    if(entry.errors && entry.errors.length > 0) {
+      entry.errors = formatErrors(entry.errors);
     }
   });
 
@@ -238,13 +246,13 @@ function displayErrors(data) {
   data.forEach(entry => {
     const time = new Date(entry.timestamp).toLocaleString();
     const durationMinutes = typeof entry.dur_minutes === "number" ? entry.dur_minutes.toFixed(1) : "--";
-    const LONG_DURATION_CUTOF = 11; // 11 minutes cutoff for 
-    const isLongDuration = typeof entry.dur_minutes === "number" && entry.dur_minutes > 11;
+    const LONG_DURATION_CUTOF = 11; // 11 minutes cutoff for when we consider that there has been too much time between sends 
+    const isLongDuration = typeof entry.dur_minutes === "number" && entry.dur_minutes > LONG_DURATION_CUTOF;
 
     const errorItems = entry.parsed_errors
       .map(err => `
         <span class="inline-block mr-3 px-2 py-0.5 rounded bg-slate-200 text-xs">
-          <b>${err.name}</b> × ${err.count}
+          <b>${err.name} (${err.code})</b> × ${err.count}
         </span>
       `)
       .join("");
@@ -630,7 +638,7 @@ function formatErrors(errors) {
   for(error of errors.split(",")) {
      const [errNum, errLen] = error.split(":");
      if(!errLen) return "/";
-     errorsList += `${errorNumToStr(parseInt(errNum))} : ${errLen}<br>`
+     errorsList += `${errorNumToStr(parseInt(errNum))} × ${errLen}<br>`
   }
   return errorsList;
 }
@@ -745,12 +753,14 @@ function displayStatusBar(name, value, precantage, color) {
 
 function batteryVoltageToProcentage(voltageStr) {
   const minVoltage = 3.5;
-  const maxVoltage = 4.2;
+  const maxVoltage = 4.1;
   const voltage = parseFloat(voltageStr);
   if (isNaN(voltage)) return 0;
 
+  const ACCURACY_CHANGE = 21; // procents increase for some percentage in order to be more "accurate" im too lazy to impment accurate function for the discharging curve 
+
   // Normalize to 0–1 range
-  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+  let percent = ((voltage - minVoltage) / (maxVoltage - minVoltage)) * 100 + ACCURACY_CHANGE;
 
   // Clamp to 0–100 range
   percent = Math.min(Math.max(percent, 0), 100);

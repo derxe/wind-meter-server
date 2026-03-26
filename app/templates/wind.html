@@ -243,6 +243,7 @@
 
 <script>
   stationData = {{ station | tojson }};
+  preloadedPrefs = {{ prefsData | tojson }}
   preloadedStatusData =  {{ statusData | tojson }}; 
   preloadedWindData =  {{ windData | tojson }}; 
   preloadedTempData =  {{ tempData | tojson }}; 
@@ -272,10 +273,6 @@
       $("#station-msg-box").show();
       $("#station-msg").html(stationData.message);
     }
-
-    $("#back-btn").click(() => {
-      window.location.pathname = "";
-    })
   })
 </script>
 
@@ -289,8 +286,8 @@
         <div class="flex flex-col gap-2">
         <!-- Title row -->
         <div class="flex items-center gap-2">
-          <button
-            id="back-btn"
+          <a
+            href="/"
             class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
                   hover:bg-slate-200 active:bg-slate-300 transition"
             aria-label="Back">
@@ -304,7 +301,7 @@
                     stroke-width="3"
                     d="M15 19l-7-7 7-7" />
             </svg>
-          </button>
+          </a>
 
           <h1 class="text-lg leading-tight">
             Vetrna Postaja –
@@ -392,15 +389,6 @@
           </div>
 
           <div class="flex items-end gap-4 text-right pr-1">
-            <!-- MAX block -->
-            <div class="leading-tight">
-              <div class="flex items-baseline justify-end gap-1">
-                <span id="max-value" class="text-xl font-semibold text-rose-500/80">--</span>
-                <span id="max-unit" class="text-sm text-slate-500"></span>
-              </div>
-               <div class="text-xs text-slate-500">sunki</div>
-            </div>
-
             <!-- AVG block -->
             <div class="leading-tight">
               <div class="flex items-baseline justify-end gap-1">
@@ -410,9 +398,14 @@
                <div class="text-xs text-slate-500">povprečna</div>
             </div>
 
-
-
-
+            <!-- MAX block -->
+            <div class="leading-tight">
+              <div class="flex items-baseline justify-end gap-1">
+                <span id="max-value" class="text-xl font-semibold text-rose-500/80">--</span>
+                <span id="max-unit" class="text-sm text-slate-500"></span>
+              </div>
+               <div class="text-xs text-slate-500">sunki</div>
+            </div>
           </div>
         </div>
 
@@ -444,8 +437,8 @@
             <button class="px-3 py-1.5 text-sm bg-slate-900 text-white" value="ms">m/s</button>
             <button class="px-3 py-1.5 text-sm bg-white text-slate-600" value="kmh">km/h</button>
           </div>
+        </div>
       </div>
-    </div>
       
       <!-- Wind Direction Card -->
       <div class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
@@ -532,7 +525,7 @@
         <div class="relative flex items-center justify-center w-full rounded-2xl overflow-hidden border border-slate-200">
 
           {% if station.wind_rose_img %}
-            <img src="/veter/static/img/{{ station.wind_rose_img }}" class="absolute inset-0 h-full w-full object-cover z-1"/>
+            <img src="{{ path_prefix }}/static/img/{{ station.wind_rose_img }}" class="absolute inset-0 h-full w-full object-cover z-1"/>
           {% else %}
             <div class="absolute bg-slate-200 inset-0 h-full w-full object-cover z-1"></div>
           {% endif %}
@@ -631,7 +624,7 @@
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
         <!--{{ sleep_overlay() }}-->
 
-        <h3 id="double-click-show-detailed"  class="font-semibold mb-3 select-none">Parametri postaje</h3> 
+        <h3 class="font-semibold mb-3">Parametri postaje</h3> 
 
         <span id="loading-status-msg">Loading status ...</span>
         
@@ -641,24 +634,24 @@
         <!-- Status info text values -->
         <div id="status-info" class="mt-4 grid gap-1 text-sm"> </div>
 
-        <button onclick="window.location.href = window.location.pathname + '/info'" class="px-3 py-1 mt-2 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
-          Pokaži več podrobnosti
-        </button>
+        <div class="mt-4 flex gap-2">
+          <a href="{{ path_prefix }}/{{ station.name }}/info"
+            class="px-3 py-1 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
+            Pokaži več podrobnosti
+          </a>
 
-        <!--
-        <button onclick="window.location.href = window.location.pathname + '/config'" class="px-3 py-1 mt-2 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
-          Configure
-        </button>-->
+          <a href="{{ path_prefix }}/{{ station.name }}/config"
+            class="px-3 py-1 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
+            Konfiguracija
+          </a>
+        </div>
 
       </div>
 
       {% if station.location %}
       <div class="relative rounded-2xl shadow-sm border border-slate-200 bg-white p-4">
-        
-        <h3 id="double-click-show-detailed"
-            class="font-semibold mb-3 select-none">
-          Lokacija
-        </h3>
+
+        <h3 class="font-semibold mb-3 select-none"> Lokacija </h3>
 
         <div class="flex flex-col gap-2 text-sm text-slate-700">
 
@@ -705,8 +698,12 @@
     </aside>
   </main>
 
-  <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
-    © 2025 Paragliding Wind Station · Built with ❤️ for paragliding 🪂
-  </footer>
+  
+  <span id="show-detailed">
+    <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-xs text-slate-400">
+      © 2026 Paragliding Wind Station · Built with <span id="heart-icon">❤️</span> for paragliding 🪂
+    </footer>
+  </span> 
+
 </body>
 </html>

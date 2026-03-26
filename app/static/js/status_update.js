@@ -3,7 +3,13 @@ console.log("status_update.js loaded");
 
 
 $(function() {
-  getStatus();
+  let prefs = {};
+  if ("prefs" in preloadedPrefs) {
+    prefs = preloadedPrefs["prefs"]; // we only care about the prefs object, not the whole document
+    prefs["station_name"] = preloadedPrefs["station_name"]; // maybe the station_name might come useful 
+  } 
+
+  displayStatusData(preloadedStatusData, prefs);
 
   $(document).on('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
@@ -21,37 +27,22 @@ function siteLoadedLongerThanXMin(mins) {
   return (Date.now() - pageLoadTime) > mins * 60 * 1000;
 }
 
-function getStatus() {
-  if (preloadedStatusData) {
-    // if preloadedStatusData exist load that data instead of getting query for it 
-    displayStatusData(preloadedStatusData);
-    cachedStatusData = preloadedStatusData;
-  } else {
-    const base = window.location.pathname;
-    $.getJSON(`${base}/data/status.json`, function(data) {
-      console.log(data)
-      displayStatusData(data);
-      cachedStatusData = data;
-    });
-  }
-}
 
 let statusDataRefreshTimeout;
-function displayStatusData(data) {
+function displayStatusData(data, prefs) {
   $('#loading-status-msg').hide();
 
-  console.log('Got new status:', data);
+  console.log('Got new status data:', data, prefs);
   
-  updateStatusPannel(data);
-  setStatuionParametersPannel(data);
-
+  updateStatusPannel(data, prefs);
+  setStatuionParametersPannel(data, prefs);
 
   if(statusDataRefreshTimeout) clearTimeout(statusDataRefreshTimeout);
 
   statusDataRefreshTimeout = setInterval(()=> {
-      updateStatusPannel(data);
-      setStatuionParametersPannel(data);
-  }, 10*1000); 
+      updateStatusPannel(data, prefs);
+      setStatuionParametersPannel(data, prefs);
+  }, 10*1000); // update every 10 seconds 
 }
 
 function toggleOverlay(type, show) {
@@ -85,54 +76,114 @@ function formattedTime(isoString) {
   return `${hh}:${min}`;
 }
 
-function isDeviceSleeping() {
-  return false;
-  if (window.location.pathname.includes("stol")) {
-    const now = new Date();
-    const hour = now.getHours();
-    // Sleeping between 20:00 and 06:00 
-    return (hour >= 18 || hour < 10);
-  }
+const sleepStart = 18;
+const sleepEnd = 8; 
 
-  return false;
+function isDeviceInPowerSavingMode(prefs) {
+  if(!prefs)  return false;
+
+  if(prefs.sleep_enabled !== "2") return false; // make sure the device is in sleep mode 2
+
+  if (!("sleep_hour_start" in prefs && "sleep_hour_end" in prefs)) return false;
+
+  const sleepStart = parseInt(prefs["sleep_hour_start"], 10);
+  const sleepEnd = parseInt(prefs["sleep_hour_end"], 10);
+
+  const now = new Date();
+  const hour = now.getHours();
+  return (hour >= sleepStart || hour < sleepEnd);
 }
 
-function updateStatusPannel(data) {
-  let timeSinceLastSend = timeSinceMinutes(data["timestamp"]);
-  const timeSinceStr = timeSince(data["timestamp"]);
+function isDeviceSleeping(prefs) {
+  if(!prefs)  return false;
+
+  if(prefs.sleep_enabled !== "1") return false; // make sure the device has sleep mode enabled
+
+  if (!("sleep_hour_start" in prefs && "sleep_hour_end" in prefs)) return false;
+
+  const sleepStart = parseInt(prefs["sleep_hour_start"], 10);
+  const sleepEnd = parseInt(prefs["sleep_hour_end"], 10);
+
+  const now = new Date();
+  const hour = now.getHours();
+  return (hour >= sleepStart || hour < sleepEnd);
+}
+
+function getSendInterval(prefs) {
+  if(isDeviceInPowerSavingMode(prefs)) {
+    const DEF_SLEEP_SEND_INTERVAL_MIN = 60; // default sleep send interval
+    return "sleep_dur_min" in prefs? parseInt(prefs["sleep_dur_min"], 10) : DEF_SLEEP_SEND_INTERVAL_MIN; // if the device is in sleep mode, use the sleep send interval
+  }
+  else return parseInt(prefs["send_data_interval_min"], 10);
+}
+
+function updateStatusPannel(data, prefs) {
+  let timeSinceLastSendMin = timeSinceMinutes(data["timestamp"]);
+  const timeSinceStr = formatTimeSince(data["timestamp"]);
   const time = formattedTime(data["timestamp"]);
 
   let bubleText = "--";
-  let titleText = "--";
   let detailsText = "";
   let statusClass = "status-offline"
 
+  const send_interval = getSendInterval(prefs);
 
-  if(timeSinceLastSend < 22) {
+  // in minutes what we consider to be normal for the device to send data
+  const send_interval_OK = Math.min(send_interval * 2.5, 40); 
+  const send_interval_ERROR = 60 * 24 * 2; // no data send in 2 days
+
+  if(timeSinceLastSendMin < send_interval_OK) {
     bubleText = "Deluje"
     statusClass = "status-ok"
-  } else if(timeSinceLastSend >= 200) {
+  } else if(timeSinceLastSendMin >= send_interval_ERROR) {
     bubleText = "Napaka"
     statusClass = "status-error"
-  } else if(timeSinceLastSend >= 22) {
+  } else if(timeSinceLastSendMin >= send_interval_OK) {
     bubleText = "Ni odziva 🤔"
     statusClass = "status-non-responsive"
-  }
+  } 
 
   if(stationData && stationData["status"] === "offline") {
     bubleText = "Začasno Onemogočena";
     statusClass = "status-offline"
   }
 
-  if(isDeviceSleeping()) {
+  if(isDeviceInPowerSavingMode(prefs)) {
+    bubleText = "🔋 Varčni način"
+    if(prefs && prefs.sleep_enabled === "2") { 
+      detailsText =  `Naprava varčuje z baterijo zato med <b>${prefs["sleep_hour_start"]}.</b> in <b>${prefs["sleep_hour_end"]}. uro</b> `;
+      detailsText += `pošilja podatke samo vsakih ${send_interval} min<br>`;
+    }
+    statusClass = "status-sleeping"
+  }
+
+  if(isDeviceSleeping(prefs)) {
     bubleText = "Naprava počiva 😴"
-    detailsText = `Naprava ne pošilja podatkov med <b>8 uro</b> zvečer in <b>6 uro</b> zutraj.<br>`;
+    if(prefs && prefs.sleep_enabled === "2") { 
+      detailsText = `Naprava med <b>${prefs["sleep_hour_start"]} uro</b> in <b>${prefs["sleep_hour_end"]} uro</b> pošilja podatke samo vsakih ${send_interval} min<br>`;
+    } else {
+      detailsText = `Naprava je nastavljena, da ne pošilja podatkov med <b>${sleepStart} uro</b> in <b>${sleepEnd} uro</b>.<br>`;
+    }
     statusClass = "status-sleeping"
   }
 
   //toggleOverlay("sleeping", isDeviceSleeping());
 
-  detailsText += `Postaja zadnjič poslala podatke: <b>${time}</b>, pred <b>${timeSinceStr}</b>`;
+  const nextExpectedSendMin = send_interval? send_interval - timeSinceLastSendMin : null;
+  detailsText += `Podatki poslani ob: <b>${time}</b>`
+  detailsText += `, pred <b>${timeSinceStr}</b>` 
+
+  detailsText += `<i class="ml-1 text-slate-400">`;
+
+  if(nextExpectedSendMin < 0) {
+    nextExpectedSendMin 
+    detailsText += `(kasni za ${formatElapsedMinutes(Math.abs(nextExpectedSendMin))})`;
+  } else if (nextExpectedSendMin === 0) {
+    detailsText += `(naslj. čez <1 min)`;
+  } else {
+    detailsText += `(naslj. čez ${formatElapsedMinutes(nextExpectedSendMin)})`;
+  }
+  detailsText += `</i>`;
 
   $("#header")
     .removeClass("status-ok status-offline status-sleeping status-error status-non-responsive")
@@ -141,14 +192,14 @@ function updateStatusPannel(data) {
   $("#status-bubble-text").text(bubleText);
   $("#status-detailed-text").html(detailsText);
   
-  console.log("should refresh", timeSinceLastSend > 10, "in:", 10 - timeSinceLastSend, "min");
-  if(timeSinceLastSend > 10 && siteLoadedLongerThanXMin(2)) { // TODO make it so that we recieve the message from the server when we have to reaload on data change 
+  console.log("should refresh", timeSinceLastSendMin > send_interval, "in:", send_interval - timeSinceLastSendMin, "min");
+  if(timeSinceLastSendMin > send_interval && siteLoadedLongerThanXMin(2)) { // TODO make it so that we recieve the message from the server when we have to reaload on data change 
     location.reload();
   }
 }
 
 
-function setStatuionParametersPannel(data) {
+function setStatuionParametersPannel(data, prefs) {
   $('#status-info').html("");
   $('#status-graphical-info').html("");
 
@@ -156,14 +207,15 @@ function setStatuionParametersPannel(data) {
   const signalQualityStr = `${signal.quality}, ${signal.dbm} dB`;
 
   displayStatusInfo("Čas meritve:", `${formattedDate(data["timestamp"])}`);
-  displayStatusInfo("Zadnjič:", `pred ${timeSince(data["timestamp"])}`);
+  displayStatusInfo("Zadnjič:", `pred ${formatTimeSince(data["timestamp"])}`);
+  displayStatusInfo("Interval pošiljanja:", `${prefs["send_data_interval_min"] ?? "--"} min`);
   displayStatusInfo("Baterija:", (data["vbatIde"]??"--") + " V");
   displayStatusInfo("Solar:", (data["vsol"]??"--") + " V");
   displayStatusInfo("Signal:", signalQualityStr);
   displayStatusInfo("Trajanje pošiljanja:", (data["dur"]??"--") + "s");
   displayStatusInfo("FW version:", data["ver"]);
-  displayStatusInfo("Imsi:", data["imsi"]??"--");
-  displayStatusInfo("Telefonska:", data["phoneNum"]??"--");
+  displayStatusInfo("Imsi:", data["imsi"] ?? prefs["imsi"] ?? "--");
+  displayStatusInfo("Telefonska:", data["phoneNum"] ?? prefs["phoneNum"] ?? "--");
 
   const battProc = batteryVoltageToProcentage(data["vbatIde"]);
   const battBarColor = batteryColorHex(battProc);
@@ -276,20 +328,16 @@ function timeSinceMinutes(isoString) {
   return Math.floor(diffMin);
 }
 
-function timeSince(isoString) {
-  const date = new Date(isoString);
-  const now = new Date();
+function formatTimeSince(isoString) {
+  diffMin = timeSinceMinutes(isoString);
+  return formatElapsedMinutes(diffMin);
+}
 
-  const diffMs = now - date; // milliseconds difference
-  const diffMin = diffMs / 60000; // convert to minutes
-
-  let elapsed;
-  if (diffMin < 1) elapsed = "ravnokar";
-  else if (diffMin < 60) elapsed = `${Math.floor(diffMin)} min`;
-  else if (diffMin < 1440) elapsed = `${Math.floor(diffMin / 60)} ur`;
-  else elapsed = `${Math.floor(diffMin / 1440)} dni`;
-
-  return elapsed;
+function formatElapsedMinutes(elapsed) {
+  if (elapsed < 1) return "ravnokar";
+  else if (elapsed < 60) return `${Math.floor(elapsed)} min`;
+  else if (elapsed < 1440) return `${Math.floor(elapsed / 60)} ur`;
+  else return `${Math.floor(elapsed / 1440)} dni`;
 }
 
 function csqToSignalAuto(csq) {

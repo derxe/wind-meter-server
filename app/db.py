@@ -7,7 +7,7 @@ import sys
 import logging 
 from zoneinfo import ZoneInfo
 import pprint
-from math import floor, nan
+from math import floor, nan, ceil
 from typing import List, Dict, Any
 import numpy as np
 from pymongo import UpdateOne
@@ -27,15 +27,30 @@ if DB_CLIENT_NAME is None:
     raise ValueError("Unable to get DB_CLIENT_NAME from environment. Cant run db.py")
 
 logging.info(f"Using MongoDB URI: {DB_URL}")
-client = MongoClient(DB_URL)
 
+client = MongoClient(DB_URL)
+#logging.info(f"MongoDB version: {client.server_info()['version']}")
 
 # print the MongoDB URI being used
 logging.info("connected to MongoDB")
 db = client[DB_CLIENT_NAME]
 
-# wind speed conversion between RPMs measured to m/s 
-DEF_SPEED_RPM_TO_MS = 0.33/3.6  # 0.091667
+
+# Create indexes for all the collections 
+def ensure_indexes():
+    db.dirs.create_index([("station_name", 1),("timestamp", -1)])
+    db.winds.create_index([("station_name", 1),("timestamp", -1)])
+
+    db.dir_bucketed.create_index([("station_name", 1),("timestamp", -1)])
+    db.wind_bucketed.create_index([("station_name", 1),("timestamp", -1)])
+
+    db.statuses.create_index([("station_name", 1),("timestamp", -1)])
+
+    db.prefs.create_index([("station_name", 1),("timestamp", -1)])
+    db.errors.create_index([("station_name", 1),("timestamp", -1)])
+
+ensure_indexes()
+
 
 
 def get_or_create_station(sender_id_imsi):
@@ -46,6 +61,7 @@ def get_or_create_station(sender_id_imsi):
     station_defaults = {
         "imsi": sender_id_imsi,
         "name": f"unnamed_{sender_id_imsi}", 
+        "active": True,
         "full_name": f"{sender_id_imsi}",
         "created_on": datetime.now(TZ),
     }
@@ -88,18 +104,153 @@ def add_station(station: dict):
     )
 
 def get_station_speed_to_rpm(station_name):
-    station = get_station(station_name)
+    station = get_station_with_name(station_name)
+
     if station is None or "rpm_to_ms" not in station:
+        DEF_SPEED_RPM_TO_MS = 0.33/3.6  # 0.091667 # wind speed conversion between RPMs measured to m/s 
         return DEF_SPEED_RPM_TO_MS
     
     return station["rpm_to_ms"]
 
 
+def get_station_dir_adjustment(station_name):
+    station = get_station_with_name(station_name)
+
+    if station is None or "dir_adjustment" not in station:
+        return 0
+    
+    return station["dir_adjustment"]
+
+def split_value_pairs(station_name, data, key_value_separator=":", pair_separator=","):
+    result = {}
+
+    for pair in data.split(pair_separator):
+        if not pair.strip(): # skip empty pairs, can happen if there are trailing separators
+            continue
+    
+        if key_value_separator not in pair:
+            logging.warning(f"#{station_name}: parsing value pairs. missing {key_value_separator} in the pair. pair:'{pair}'")
+            continue
+
+        key, value = pair.split(key_value_separator, 1)
+
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            logging.warning(f"#{station_name}: parsing value pairs. missing key in the pair. pair:'{pair}'")
+            continue
+
+        if key in result:
+            logging.warning(f"#{station_name}: parsing value pairs. DUPLICATE key in the pair. pair:'{pair}'")
+            continue
+
+        result[key] = value
+
+    return result
+
+def parse_raw_error_codes_old(station_name, data):
+    error_codes = {}
+
+    # remove the "errors=" at the beginning
+    if not data.startswith("errors="):
+        return error_codes
+    
+    raw = data[len("errors="):]
+
+    if not raw:
+        return error_codes
+
+    i = raw.index("ERR_RESET_UNEXPECTED:")
+    error_codes.update(split_value_pairs(station_name, raw[:i], key_value_separator=":", pair_separator=","))
+    error_codes.update(split_value_pairs(station_name, raw[i:], key_value_separator=":", pair_separator=";"))
+
+    return error_codes
+
+
+def parse_raw_error_codes(station_name, data):
+    error_codes = {}
+
+    # the old error code format starts with "errors=", if it does, use the old parsing method
+    if data.startswith("errors="):
+        return parse_raw_error_codes_old(station_name, data)
+
+    if not data:
+        return error_codes
+
+    error_codes.update(split_value_pairs(station_name, data, key_value_separator="=", pair_separator=";"))
+
+    return error_codes
+
+
+def save_error_codes(station_name, data, timestamp):
+    error_codes = parse_raw_error_codes(station_name, data)
+
+    db.errors.insert_one({
+        "station_name": station_name,
+        "timestamp": timestamp,
+        "error_codes_raw": data,
+        "error_codes": error_codes,
+    })
+
+
+def get_most_recent_error_codes(station_name, count=1):
+    error_codes = get_most_recent_n_error_codes(station_name, count)
+    return error_codes[0] if error_codes else {}
+
+def get_most_recent_n_error_codes(station_name, count=1):
+    error_codes = list(db.errors.find(
+        {"station_name": station_name},
+        { "_id":0 }
+    ).sort(
+        "timestamp", -1
+    ).limit(count))
+
+    for e in error_codes:
+        e['timestamp'] = e['timestamp'].astimezone(TZ).isoformat()
+
+    return error_codes
+
+def parse_raw_prefs_data(station_name, data):
+    return split_value_pairs(station_name, data, key_value_separator="=", pair_separator=";")
+
+
+def save_prefs(station_name, data, timestamp):
+    prefs = parse_raw_prefs_data(station_name, data)
+
+    db.prefs.insert_one({
+        "station_name": station_name,
+        "timestamp": timestamp,
+        "prefs_raw": data,
+        "prefs": prefs,
+    })
+
+
+def get_most_recent_prefs(station_name):
+    most_recent_prefs = get_most_recent_n_prefs(station_name, count=1)
+
+    #logging.info(f"Got most recent prefs for {station_name}: {most_recent_prefs}")
+    return most_recent_prefs[0] if most_recent_prefs else {}
+
+def get_most_recent_n_prefs(station_name, count=1):
+    prefs = list(db.prefs.find(
+        {"station_name": station_name}, 
+        { "_id":0 }
+    ).sort(
+        "timestamp", -1
+    ).limit(count))
+
+    for p in prefs:
+        p['timestamp'] = p['timestamp'].astimezone(TZ).isoformat()
+        del p['prefs_raw']
+
+    return prefs
+
 def get_prefs_to_send(station_name):
-    return db.prefs.find_one({"_id": station_name})
+    return db.prefs_to_send.find_one({"_id": station_name})
 
 def save_prefs_to_send(station_name, prefs):
-    db.prefs.update_one(
+    db.prefs_to_send.update_one(
         {"_id": station_name},
         {"$set": prefs},
         upsert=True
@@ -184,7 +335,7 @@ base_timestamp = None
 
 def save_wind_data(station_name, winds_data):
     if not winds_data:
-        print("No wind data to save")
+        logging.info(f"#{station_name}: No wind data to save")
         return
 
     if len(winds_data["winds"]) > 0:
@@ -198,18 +349,23 @@ def save_wind_data(station_name, winds_data):
 
 
 def get_array_from_status_data(data, key):
-    if key not in data:
+    value = data.pop(key, None) # remove the key 
+    if value is None:
         return []
 
-    # if the data was already converted to the float, conver it back to str array
-    if isinstance(data[key], float):
-        return [str(int(data[key]))]
+    # if already converted to float, convert to int and return it, only in single value case
+    if isinstance(value, float):
+        return [int(value)]
 
-    # split the array by "," and save only valid intigers inside
-    array = [int(x.strip()) for x in data[key].split(",") if x.strip().lstrip("-+").isdigit()]
+    # parse comma-separated values
+    array = [
+        int(x.strip())
+        for x in value.split(",")
+        if x.strip().lstrip("-+").isdigit()
+    ]
 
-
-    data.pop(key, None) # remove the key 
+    # replace negative values with None
+    array = [x if x >= 0 else None for x in array]
 
     return array
 
@@ -322,21 +478,26 @@ def parse_status_update(line, station, base_ts):
     data = {}
     data["timestamp"] = base_ts # add timestamp to the data
     
-    logging.info(f"Saving data for station: {station}")
+    logging.info(f"#{station['name']}: Saving data for station: {station}")
     for part in line.split(";"):
         if len(part) == 0:
             continue
 
         if "=" not in part:
-            logging.warning(f"Malformed part missing '=' in the line: '{line}'. part: '{part}'")
+            logging.warning(f"#{station['name']}: Malformed part missing '=' in the line: '{line}'. part: '{part}'")
             continue
 
         parts = part.split("=")
         if len(parts) != 2:
-            logging.warning(f"Malformed part doesnt have 2 parts in the line: '{line}'. part: '{part}'")
+            logging.warning(f"#{station['name']}: Malformed part doesnt have 2 parts in the line: '{line}'. part: '{part}'")
             continue
 
         key, val  = parts
+
+        if len(val.strip()) == 0:
+            logging.warning(f"#{station['name']}: Malformed part has empty value in the line: '{line}'. part: '{part}'")
+            continue
+        
         data[key.strip()] = val
             
 
@@ -351,27 +512,26 @@ def parse_status_update(line, station, base_ts):
     try:
         pass #calc_vbat_change_rate(data, station_name)
     except Exception as e:
-        logging.error("Error calculating vbat change rate", exc_info=True)
+        logging.error(f"#{station['name']}: Error calculating vbat change rate", exc_info=True)
 
     requiredFields = ["logFirst", "logLast", "len", "avg", "dir"]
 
     missing = [f for f in requiredFields if f not in data]
     if missing:
-        print(f"Required fields to parse wind data are missing: {missing}. Data: {data}")
+        logging.warning(f"#{station['name']}: Required fields to parse wind data are missing: {missing}. Data: {data}")
         return data, None
 
     # get arrays and remove the keys 
     # extract the avg,max and dir arrays from the data and convert them to array 
     winds = get_array_from_status_data(data, "avg") 
     dirs = get_array_from_status_data(data, "dir")
-    #pprint.pprint(data)
+
+    logging.info(f"#{station['name']}: Winds: {winds} dirs: {dirs}")
+
     timestamps = generate_times(base_ts, int(data["logFirst"]), int(data["logLast"]), int(data["len"]))
     data.pop("logFirst", None)
     data.pop("logLast", None)
     data.pop("len", None)
-
-    dir_adjustment = station["dir_adjustment"] if "dir_adjustment" in station else 0
-    dirs = [(d+dir_adjustment) % 360 for d in dirs]
 
     #pprint.pprint(timestamps)
     
@@ -379,6 +539,17 @@ def parse_status_update(line, station, base_ts):
         "winds": set_timestamps_to_data(winds, timestamps),
         "dirs": set_timestamps_to_data(dirs, timestamps),
     }
+
+    # adjust the measurements based on the calibration
+    dir_adjustment = station.get("dir_adjustment", 0)
+    winds_data["dirs"] = [
+        {
+            "value": (d["value"] + dir_adjustment) % 360,
+            "value_raw": d["value"],
+            "timestamp": d["timestamp"]
+        }
+        for d in winds_data["dirs"]
+    ]
 
     return data, winds_data
 
@@ -414,6 +585,9 @@ def set_timestamps_to_data(data, timestamps):
     
     data_with_timestamps = []
     for i in range(len(data)):
+        if data[i] is None:
+            continue # do not save the None / invalid values
+
         data_with_timestamps.append({
             "value": data[i],
             "timestamp": timestamps[i]
@@ -421,27 +595,20 @@ def set_timestamps_to_data(data, timestamps):
 
     return data_with_timestamps
 
-def get_station(imsi):
-    device = None
-    if imsi is not None:
-        device = get_station_with_imsi(imsi)
-    
-    return device
 
-
-def save_recived_data(line, station, timestamp):
+def save_received_data(line, station, timestamp):
     if not line or not timestamp:
-        logging.warning("No line or timestamp to save")
+        logging.warning(f"#{station['name']}: No line or timestamp to save")
         return
 
     station_name = station["name"]
 
     data, winds_data = parse_status_update(line, station, timestamp)
     if not data:
-        logging.warning(f"No data found in line: {line}")
+        logging.warning(f"#{station['name']}: No data found in line: {line}")
         return
-    
-    logging.info(f"Saving status update at {timestamp} with data: {data} and winds data len: {len(winds_data)}")
+
+    logging.info(f"#{station['name']}: Saving status update at {timestamp} with data: {data} and winds data len: {len(winds_data)}")
 
     # save station status    
     if data is not None:
@@ -671,12 +838,20 @@ def get_directions(station_name, duration_hours=6):
          "timestamp": {"$gte": start_time, "$lte": end_time},
          "station_name": {"$eq": station_name}
         },
-        {"_id": 0, "timestamp": 1, "value": 1}
+        {"_id": 0, "timestamp": 1, "value": 1, "value_raw": 1}
     ).sort("timestamp", -1)
 
+
+    dir_adjustment = get_station_dir_adjustment(station_name)
     data = []
     for doc in cursor:
         doc['timestamp'] = doc['timestamp'].astimezone(TZ).isoformat()
+
+        # use the raw value if avaliable, so that we can adjust the dir based on the calibration live 
+        if "value_raw" in doc:
+            doc["value"] = (doc["value_raw"] + dir_adjustment) % 360
+            del doc["value_raw"]
+
         data.append(doc)
 
     return data
@@ -721,7 +896,7 @@ def get_temp(station_name, duration_hours=6):
 
 
 def get_bucketed_data(station_name, duration_hours=6):
-    logging.info(f"Fetching bucketed data from the last {duration_hours} hours")
+    logging.info(f"Fetching bucketed data from the last {duration_hours} hours. For:{station_name}")
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
 
     # --- fetch data ---
@@ -739,11 +914,19 @@ def get_bucketed_data(station_name, duration_hours=6):
     dirs_map = {d["timestamp"]: d for d in dirs}
 
     # --- merge datasets ---
+    speed_rpm_to_ms = get_station_speed_to_rpm(station_name)
+    #logging.info(f"Got speed_rpm_to_ms: {speed_rpm_to_ms}")
     merged = []
     for w in winds:
         ts = w["timestamp"]
         d = dirs_map.get(ts)
         direction =  d.get("mode") if d is not None else None 
+
+        if "avg_rpm" in w:
+            w["avg"] = w["avg_rpm"] * speed_rpm_to_ms
+        
+        if "max_rpm" in w:
+            w["max"] = w["max_rpm"] * speed_rpm_to_ms
 
         merged.append({
             "timestamp": ts.astimezone(TZ).isoformat(),
@@ -754,6 +937,9 @@ def get_bucketed_data(station_name, duration_hours=6):
     
     return merged
 
+
+"""
+Not used:
 
 def get_wind_bucketed(station_name, duration_hours=6):
     logging.info(f"Fetching bucketed wind data from the lsat {duration_hours} hours")
@@ -789,6 +975,8 @@ def get_dirs_bucketed(station_name, duration_hours=6):
         data.append(doc)
 
     return data
+"""
+
 
 def get_n_data():
     return {
@@ -813,7 +1001,7 @@ def parse_saved_line(line, sender_imsi):
 
 def set_last_bucket_filled(station_name, timestamp_ms, type_name):
     last_bucket_filed = datetime.fromtimestamp(timestamp_ms / 1000, tz=TZ)
-    logging.info(f"setting last_bucket_filed: for:'{type_name}' '{last_bucket_filed}'")
+    logging.info(f"#{station_name}: setting last_bucket_filed: for:'{type_name}' '{last_bucket_filed}'")
     db.bucket_props.update_one(
         {"_id": station_name},
         {"$set": {"last_bucket_filed_" + type_name: last_bucket_filed}},
@@ -831,7 +1019,7 @@ def get_last_bucket_filled(station_name, type_name):
 
 def create_average_wind_values(station_name):
     first_data_to_average = get_last_bucket_filled(station_name, "wind")
-    logging.info(f"first_data_to_average: '{first_data_to_average}'")
+    logging.info(f"#{station_name}: first_data_to_average: '{first_data_to_average}'")
 
     start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.winds.find(
@@ -844,7 +1032,7 @@ def create_average_wind_values(station_name):
     for doc in cursor:
         timestamp = int(doc['timestamp'].astimezone(TZ).timestamp() * 1000)
         doc["x"] = timestamp
-        doc["y"] = doc["value"] * speed_rpm_to_ms
+        doc["y"] = doc["value"]
         wind_data.append(doc)
     
     #pprint.pprint(len(wind_data))
@@ -855,6 +1043,10 @@ def create_average_wind_values(station_name):
     
     for data_wind in wind_bucketed:
         data_wind["station_name"] = station_name
+        data_wind["avg_rpm"] = data_wind["avg"]  # save the original rpm values before converting to m/s, so we can change it back anytime if the conversion constant changes
+        data_wind["max_rpm"] = data_wind["max"]
+        data_wind["avg"] = round(data_wind["avg"] * speed_rpm_to_ms, 2)
+        data_wind["max"] = round(data_wind["max"] * speed_rpm_to_ms, 2)
 
     set_last_bucket_filled(station_name, last_bucket_filed_ms, "wind")
 
@@ -869,7 +1061,6 @@ def create_average_dir_values(station_name):
     first_data_to_average = get_last_bucket_filled(station_name, "dir")
     print("first_data_to_average", first_data_to_average)
 
-    start_time = datetime.now(TZ) - timedelta(hours=0.2)
     cursor = db.dirs.find(
         {"timestamp": {"$gte": first_data_to_average}, "station_name": station_name},
         {"_id": 0, "timestamp": 1, "value": 1}
@@ -882,7 +1073,7 @@ def create_average_dir_values(station_name):
         doc["y"] = int((doc["value"] + 22.5) // 45 % 8)
         dirs_data.append(doc)
     
-    logging.info(f"bucket dir values len: {len(dirs_data)}")
+    logging.info(f"#{station_name}: bucket dir values len: {len(dirs_data)}")
     #pprint.pprint(len(dirs_data))
     dirs_bucketed, last_bucket_filed_ms  = bucket_aggregate(dirs_data, modes=["mode"])
     if dirs_bucketed is None:
@@ -891,10 +1082,10 @@ def create_average_dir_values(station_name):
     
     for data in dirs_bucketed:
         data["station_name"] = station_name
-
+        
     set_last_bucket_filled(station_name, last_bucket_filed_ms, "dir")
 
-    logging.info(f"dir bucketed values: {pprint.pformat(dirs_bucketed)}")
+    logging.info(f"#{station_name}: dir bucketed values: {pprint.pformat(dirs_bucketed)}")
     timestamps = [item["timestamp"] for item in dirs_bucketed]
     db.dir_bucketed.delete_many({"timestamp": {"$in": timestamps}, "station_name": station_name})
     db.dir_bucketed.insert_many(dirs_bucketed)
@@ -933,15 +1124,12 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
     buckets: Dict[int, Dict[str, Any]] = {}
 
     bucket_index = 0
-    #print("n points:", len(points))
     for p in points:
         x = p["x"]; y = p["y"]
         k = day0 + floor((x - day0) / W) * W + W // 2
         if bucket_index != k:
-            #print("Bucket K:", get_hour_min(k))
             bucket_index = k
 
-        #print("x:",  get_hour_min_sec(x))
         b = buckets.get(k)
         if b is None:
             # store whole point for first/last/min/max semantics
@@ -973,9 +1161,21 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
                 best_val = v
         return best_val
 
+    def max_10_mean(arr: List[float]) -> float:
+        """
+        Average of the maximum 10% values in arr.
+        Uses at least 1 value to avoid empty slices.
+        """
+        n = len(arr)
+        if n == 0:
+            return nan
+        take = max(1, int(ceil(n * 0.10)))
+        top = sorted(arr, reverse=True)[:take]
+        return sum(top) / len(top)
+
     out: List[Dict[str, float]] = []
 
-    last_bucket_filed_x = 0 
+    last_bucket_filed_x = 0
     for k in sorted(buckets.keys()):
         b = buckets[k]
         ys = b["ys"]
@@ -983,13 +1183,14 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
 
         timestamp = datetime.fromtimestamp(float(k) / 1000, tz=TZ)
         out_data = {"timestamp": timestamp}
+
         for mode in modes:
             out_value = -123
             if mode == "min":
                 out_value = b["min"]["y"]
 
             elif mode == "max":
-                out_value = b["max"]["y"]
+                out_value = max_10_mean(ys) #b["max"]["y"]
 
             elif mode == "median":
                 out_value = median(ys)
@@ -997,20 +1198,20 @@ def bucket_aggregate(points: List[Dict[str, Any]], minutes: int = 15, modes: Lis
             elif mode == "mode":
                 out_value = mode_value(ys)
 
-            elif mode == "mean" or mode == "avg": 
+            elif mode == "max_10":
+                out_value = max_10_mean(ys)
+
+            elif mode == "mean" or mode == "avg":
                 out_value = sum(ys) / len(ys)
+
             else:
                 logging.critical(f"Non existing mode: {mode} for modes:{modes}")
 
             out_data[mode] = round(out_value, 2)
-        
+
         out.append(out_data)
 
-    #print("out last", get_hour_min_sec(out[-1]["x"]))
-    #print("out first", get_hour_min_sec(out[0]["x"]))
-    #print("last min x,", get_hour_min_sec(last_min_x))
-
-    # last_bucket_filed_x is the most largest key that was in a bucket that wasnt fully filled 
+    # last_bucket_filed_x is the most largest key that was in a bucket that wasnt fully filled
     return out, last_bucket_filed_x
 
 """
@@ -1331,8 +1532,18 @@ if __name__ == "__main__":
     )
 
     print("matched: ", result.matched_count, "modified:", result.modified_count)
+
+      result = db.statuses.update_many(
+        {"station_name": "unnamed_293400130736647"},
+        {"$set": {"station_name": "testna1"}}
+    )
+
+    print("matched / modified count:", result.matched_count, result.modified_count)
+
     """
 
+
+    # interate all the 
 
 
     #with open("data.txt", "r") as f:
@@ -1345,12 +1556,7 @@ if __name__ == "__main__":
     #            logging.exception("Failed to save received data")
     #        print(".", end="", flush=True)
 
-    result = db.statuses.update_many(
-        {"station_name": "unnamed_293400130736647"},
-        {"$set": {"station_name": "testna1"}}
-    )
-
-    print("matched / modified count:", result.matched_count, result.modified_count)
+  
 
     print("Devices: ", get_stations())
     print("Number of statuses:", db.statuses.count_documents({}))

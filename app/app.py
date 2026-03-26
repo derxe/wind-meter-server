@@ -1,5 +1,7 @@
 from flask import Flask, request, redirect, session, url_for, render_template, Response, jsonify, abort, send_file
+from flask_basicauth import BasicAuth
 from flask_compress import Compress
+from functools import wraps
 import requests
 import os
 import re
@@ -8,6 +10,9 @@ import glob
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from werkzeug.exceptions import HTTPException
+
+
+
 
 import logging
 from pymongo import MongoClient
@@ -20,26 +25,84 @@ import file_logger as file_logs
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 app.secret_key = 'super-secret'
 Compress(app)
+
+# Credentials for accessing the config page
+app.config['BASIC_AUTH_USERNAME'] = 'admin'
+app.config['BASIC_AUTH_PASSWORD'] = 'elomush'
+basic_auth = BasicAuth(app)
+
 #cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': (60*20)})
 
 logging.basicConfig(level=logging.INFO, format='%(module)s [%(asctime)s] %(levelname)s: %(message)s')
+
+last_stream_data = 0.0
+
+@app.context_processor
+def inject_path_prefix():
+    host = request.host.split(":")[0]  # remove port if present
+
+    if host in ["vetr.si", "www.vetr.si"]:
+        prefix = ""
+    else:
+        prefix = "/veter"
+
+    return dict(path_prefix=prefix)
+
+
+@app.route("/stream/<sender_id>", methods=["GET"])
+def save_stream_sender_id(sender_id):
+    global last_stream_data
+
+    ip = request.remote_addr
+    print(f"Got stream save request from: {sender_id}. From ip: {ip}")
+
+    data = request.query_string.decode("utf-8")
+    now = time.time()
+    since_last_data_send = None if last_stream_data == 0.0 else now - last_stream_data
+    last_stream_data = now
+
+    if since_last_data_send is None:
+        logging.info(f"Got data from: {sender_id}: last: first packet Data: {data}")
+    else:
+        logging.info(f"Got data from: {sender_id}: last: {since_last_data_send:.3f}s Data: {data}")
+
+    station = db.get_or_create_station(sender_id)
+    logging.info(f"#{station['name']}: Saving stream, for station: '{station}'")
+    file_logs.save_query_to_log(f"stream_{station['name']}_{sender_id}", data)
+
+    response = f"saved: {len(data)}\n"
+    return Response(response, mimetype="text/plain")
+
 
 @app.route("/save_error/<sender_id>", methods=["POST"])
 def save_error_codes_sender_id(sender_id):
     ip = request.remote_addr
     print(f"Got errors save request from: {sender_id}. From ip: {ip}")
     data = request.get_data(as_text=True)    
+    
+    station = db.get_or_create_station(sender_id)
+    logging.info(f"#{station['name']}: Saving prefs, for station: '{station}'")
+    file_logs.save_query_to_log(f"errors_{station['name']}_{sender_id}", data)
+
+    db.save_error_codes(station['name'], data, datetime.now(ZoneInfo("Europe/Berlin")))
+
     response = f"saved: {len(data)}\n"
-    file_logs.save_query_to_log("errors_" + sender_id, data)
     return Response(response, mimetype="text/plain")
+
 
 @app.route("/save_prefs/<sender_id>", methods=["POST"])
 def save_prefs_sender_id(sender_id):
     ip = request.remote_addr
     print(f"Got preferences save request from: {sender_id}. From ip: {ip}")
     data = request.get_data(as_text=True)
+    
+    station = db.get_or_create_station(sender_id)
+    logging.info(f"#{station['name']}: Saving prefs, for station: '{station}'")
+    file_logs.save_query_to_log(f"prefs_{station['name']}_{sender_id}", data)
+
+    db.save_prefs(station['name'], data, datetime.now(ZoneInfo("Europe/Berlin")))
+
     response = f"saved: {len(data)}\n"
-    file_logs.save_query_to_log("prefs_" + sender_id, data)
     return Response(response, mimetype="text/plain")
 
 def redirect_request_to_dev(sender_id, data):
@@ -56,47 +119,68 @@ def redirect_request_to_dev(sender_id, data):
 
 @app.route("/")
 def list_stations():
-    #data = {
-    #    'stations': db.get_stations(),
-    #    'last_status': db.get_last_status("peter"),
-    #}
     data = {
-        "stations": [
-            {"name": "peter", "active": True,  "full_name": "Sv. Peter",   "imsi": "293400130492916"},
-            {"name": "test",  "active": False, "full_name": "zg lipnica",  "imsi": "293400130750155"},
-        ],
-        "last_status": {
-            "timestamp": "...",
-            "pref": "...",
-            "prefDate": "...",
-            "ver": "v3",
-            "imsi": "293400130492916",
-            "phoneNum": "...",
-            "temp": "1.4",
-            "hum": "89",
-            "vbatIde": "4.006",
-            "vbatGprs": "3.983",
-            "vsol": "0.022",
-            "dur": "12.3",
-            "signal": "31",
-            "regDur": "1.7",
-            "gprsRegDur": "1.1",
-            "errors": "2:4,9:2",
-            "vbat_rate": -0.15,
-            "station_name": "peter"
-        },
-        "last_wind": {
-            "avg": 0.03,
-            "dir": 1,
-            "max": 0.46,
-            "temp": 12,
-            "hum": 70,
-            "timestamp": "2025-12-06T23:30:00+01:00"
-        }
+        "stations": db.get_stations(),
     }
     
-    logging.info(f"Data to send: {data}")
     return render_template("station_list.html", data=data)
+
+
+def _clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def _cardinal_from_deg(deg):
+    cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    return cardinals[int((deg + 22.5) // 45) % 8]
+
+
+def _station_mock_view(station, idx):
+    station_name = station.get("name", f"station_{idx}")
+    full_name = station.get("full_name", station_name)
+
+    seed = sum(ord(ch) for ch in station_name) + (idx + 1) * 17
+
+    avg = round(1.8 + (seed % 70) / 10.0, 1)
+    max_speed = round(avg + 0.8 + ((seed // 7) % 50) / 10.0, 1)
+    direction_deg = (seed * 13) % 360
+
+    map_x = None
+    map_y = None
+    location = station.get("location", {})
+    if isinstance(location, dict):
+        lat = location.get("lat")
+        lon = location.get("lon")
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            # Slovenia-ish bounds for mock projection.
+            lon_norm = _clamp((lon - 13.3) / (16.7 - 13.3), 0.0, 1.0)
+            lat_norm = _clamp((lat - 45.3) / (46.9 - 45.3), 0.0, 1.0)
+            map_x = round(8 + lon_norm * 84, 2)
+            map_y = round(8 + (1 - lat_norm) * 84, 2)
+
+    if map_x is None or map_y is None:
+        cols = 5
+        map_x = round(12 + (idx % cols) * (75 / max(cols - 1, 1)), 2)
+        map_y = round(15 + ((idx // cols) % 4) * 20, 2)
+
+    return {
+        "name": station_name,
+        "full_name": full_name,
+        "mock_avg": avg,
+        "mock_max": max_speed,
+        "mock_direction_deg": direction_deg,
+        "mock_direction_cardinal": _cardinal_from_deg(direction_deg),
+        "map_x": map_x,
+        "map_y": map_y,
+    }
+
+
+@app.route("/landing_mock", methods=["GET"])
+def landing_mock():
+    stations = db.get_stations()
+    active_stations = [s for s in stations if s.get("active", True)]
+    station_views = [_station_mock_view(s, idx) for idx, s in enumerate(active_stations)]
+    return render_template("landing_mock2.html", stations=station_views)
 
 def get_prefs_for_response(station_name):
     prefs = db.get_prefs_to_send(station_name)
@@ -135,47 +219,21 @@ def save_data_sender_id(sender_id):
 
     response = f"saved: {len(data)}\n"
 
-    file_logs.save_query_to_log(sender_id, data)
-
     station = db.get_or_create_station(sender_id)
-    if station is None:
-        abort(400, description="no sender_id/imsi not saving data.")
+    logging.info(f"#{station['name']}: Got station: '{station}'")
 
-    logging.info(f"Got station: '{station}'")
+    file_logs.save_query_to_log(f"data_{station['name']}_{sender_id}", data)
+
     try:
-        db.save_recived_data(data, station, datetime.now(ZoneInfo("Europe/Berlin")))
+        db.save_received_data(data, station, datetime.now(ZoneInfo("Europe/Berlin")))
     except Exception as e:
         #logging.error(f"[ERROR] Failed to save received data: {e}", e)
-        logging.exception("Failed to save received data")
+        logging.exception(f"#{station['name']}: Failed to save received data")
         response += "error parsing data"
 
-    #if sender_id == "293400130736647":
+
     response += get_prefs_for_response(station["name"])
 
-    #if sender_id == "293400130750143":
-    #    
-    #   response += get_prefs_for_response(station["name"])
-        
-    """
-    response += prefs[""]
-    response += "prefs:\n"
-    response += "pref_version:9\n"
-
-    response += "creg_timeout_s:30\n"
-    response += "send_data_interval:10\n"
-    response += "n_send_retries:2\n"
-
-    response += "sleep_enabled:1\n"
-    response += "sleep_hour_start:17\n"
-    response += "sleep_hour_end:6\n"
-    """
-
-    #response = f"saved: {len(data)}\n"
-    #response += f"prefs:\n"
-    #response += f"pref_version:3\n"
-    #response += f"sleep_enabled:1\n"
-    #response += f"sleep_hour_start:23\n"
-    #response += f"sleep_hour_end:1\n"
     return Response(response, mimetype="text/plain")
 
 
@@ -228,7 +286,6 @@ def wind_data_all(station_name):
 
     return data
 
-
 @app.route("/<station_name>", methods=["GET"])
 def wind_station(station_name):
     station = db.get_station_with_name(station_name)
@@ -237,6 +294,7 @@ def wind_station(station_name):
 
     data = {
         'station': station,
+        'prefsData': db.get_most_recent_prefs(station_name),
         'statusData': db.get_last_status(station_name),
         'windData': db.get_bucketed_data(station_name, duration_hours=6),
         'tempData': db.get_temp(station_name, duration_hours=6),
@@ -259,6 +317,7 @@ def wind_station_info(station_name):
 
 
 @app.route("/<station_name>/config", methods=["GET"])
+@basic_auth.required
 def wind_station_config(station_name):
     station = db.get_station_with_name(station_name)
     if station_name is None:
@@ -317,6 +376,8 @@ def get_log(log_name):
         log_content = file_logs.get_n_lines(filepath, n_lines)
         
     return Response(log_content, mimetype="text/plain")
+
+
 
 
 if __name__ == '__main__':

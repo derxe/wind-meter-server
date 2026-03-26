@@ -126,7 +126,7 @@ $(function() {
 
 function loadRawLogs() {
   if(displayLogs === "raw") {
-    $.get(`https://to-ni.dev/veter/log/${stationData.imsi}.txt`, function (text) {
+    $.get(`https://to-ni.dev/veter/log/data_${stationData.name}_${stationData.imsi}.txt`, function (text) {
       displayRawLogs(text);
     });
   } else if (displayLogs === "all"){
@@ -373,7 +373,7 @@ function getGraphData(dataKey, dataName) {
     graphData.min = 0;
     graphData.max = 8;
   } else if(dataKey == "vbatIde" || dataKey == "vbatGprs") {
-    graphData.min = 3.4;
+    graphData.min = 2.8;
     graphData.max = 4.3;
   } else {
     graphData.min = null;
@@ -425,6 +425,29 @@ Chart.Tooltip.positioners.topFixed = function (items, eventPosition) {
   };
 };
 
+function clearChartTouchHover(chart) {
+  if (!chart) return;
+  chart.setActiveElements([]);
+  if (chart.tooltip) {
+    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  }
+  chart.update('none');
+}
+
+function attachTouchHoverCleanup(chart) {
+  if (!chart || chart.$touchCleanupBound) return;
+  chart.$touchCleanupBound = true;
+
+  const clear = () => clearChartTouchHover(chart);
+  const clearWhenTouchOutside = (e) => {
+    if (!chart.canvas.contains(e.target)) clear();
+  };
+
+  chart.canvas.addEventListener('touchend', clear, { passive: true });
+  chart.canvas.addEventListener('touchcancel', clear, { passive: true });
+  document.addEventListener('touchstart', clearWhenTouchOutside, { passive: true });
+}
+
 
 let chart;
 function drawGraph(data, dataName, axis) {
@@ -466,6 +489,7 @@ function drawGraph(data, dataName, axis) {
         ]
         },
         options: {
+          events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove', 'touchend', 'touchcancel'],
           interaction: {
             mode: 'index',      
             intersect: false,   
@@ -513,6 +537,8 @@ function drawGraph(data, dataName, axis) {
         },
         plugins: [verticalLinePlugin],
     });
+
+    attachTouchHoverCleanup(chart);
   }
 
   if(data) {
@@ -591,46 +617,62 @@ function setDatasetColors(datasets, dataName, axis) {
 }
 
 const ErrorCodeStrings = [
-  // 0–
-  { code: 0,  code_name: "ERR_NONE",               desc: "No error" },
+  // ---- 0 ----
+  { code: 0,  code_name: "ERR_NONE", desc: "No error" },
 
-  // 1–8 (send-related)
-  { code: 1,  code_name: "ERR_SEND_AT_FAIL",       desc: "AT command failure" },
-  { code: 2,  code_name: "ERR_SEND_NO_SIM",        desc: "No SIM card detected" },
-  { code: 3,  code_name: "ERR_SEND_CSQ_FAIL",      desc: "Signal quality (CSQ) check failed" },
-  { code: 4,  code_name: "ERR_SEND_REG_FAIL",      desc: "Network registration failed" },
-  { code: 5,  code_name: "ERR_SEND_CIMI_FAIL",     desc: "IMSI (CIMI) retrieval failed" },
-  { code: 6,  code_name: "ERR_SEND_GPRS_FAIL",     desc: "GPRS/Data connection failed" },
-  { code: 7,  code_name: "ERR_SEND_HTTP_FAIL",     desc: "HTTP communication failed" },
-  { code: 8,  code_name: "ERR_SEND_REPEAT",        desc: "Send had to be repeated" },
+  // ---- SEND / GSM / HTTP (1–16) ----
+  { code: 1,  code_name: "ERR_SEND_AT_FAIL",                  desc: "AT command failure" },
+  { code: 2,  code_name: "ERR_SEND_NO_SIM",                   desc: "No SIM card detected" },
+  { code: 3,  code_name: "ERR_SEND_CSQ_FAIL",                  desc: "Signal quality (CSQ) check failed" },
+  { code: 4,  code_name: "ERR_SEND_REG_FAIL",                  desc: "Network registration failed" },
+  { code: 5,  code_name: "ERR_SEND_CCLK_FAIL",                 desc: "Network time (CCLK) retrieval failed" },
+  { code: 6,  code_name: "ERR_SEND_CIMI_FAIL",                 desc: "IMSI (CIMI) retrieval failed" },
+  { code: 7,  code_name: "ERR_SEND_GPRS_FAIL",                 desc: "GPRS/data connection failed" },
+  { code: 8,  code_name: "ERR_SEND_HTTP_FAIL_DATA",            desc: "HTTP data send failed" },
 
-  // 9–14 (wind + buffer + dir)
-  { code: 9,  code_name: "ERR_DIR_READ",           desc: "Direction read" },
-  { code: 10, code_name: "ERR_DIR_READ_ONCE",      desc: "Read dir error had to be repeated." },
-  { code: 11, code_name: "ERR_WIND_BUF_OVERWRITE", desc: "Wind buffer overwrite" },
-  { code: 12, code_name: "ERR_WIND_SHORT_BUF_FULL",desc: "Wind (short) buffer full" },
-  { code: 13, code_name: "ERR_SPEED_SHORT_BUF_FULL",desc: "Speed (short) buffer full" },
-  { code: 14, code_name: "ERR_DIR_SHORT_BUF_FULL", desc: "Direction (short) buffer full" },
+  // code 9 intentionally unused (enum gap)
 
-  // 15–20+ (all reset-related)
-  { code: 15, code_name: "ERR_POWERON_RESET",      desc: "Power-on reset (info)" },
-  { code: 16, code_name: "ERR_BROWNOUT_RESET",     desc: "Brown-out/low-voltage reset" },
-  { code: 17, code_name: "ERR_PANIC_RESET",        desc: "Software panic/abort reset" },
-  { code: 18, code_name: "ERR_WDT_RESET",          desc: "Watchdog Timer reset" },
-  { code: 19, code_name: "ERR_SDIO_RESET",         desc: "SDIO-triggered reset" },
-  { code: 20, code_name: "ERR_USB_RESET",          desc: "USB-triggered reset" },
-  { code: 21, code_name: "ERR_JTAG_RESET",         desc: "JTAG-triggered reset" },
-  { code: 22, code_name: "ERR_EFUSE_RESET",        desc: "EFUSE error reset" },
-  { code: 23, code_name: "ERR_PWR_GLITCH_RESET",   desc: "Power glitch reset" },
-  { code: 24, code_name: "ERR_CPU_LOCKUP_RESET",   desc: "CPU lockup/double exception reset" },
-  { code: 25, code_name: "ERR_UNEXPECTED_RESETaaa",   desc: "Unexpected/unclassified reset" },
+  { code: 10, code_name: "ERR_SEND_UNKWN_FAIL",                desc: "Unknown send failure" },
+  { code: 11, code_name: "ERR_SEND_REPEAT",                    desc: "Send operation repeated" },
+  { code: 12, code_name: "ERR_SEND_FAIL_WRONG_RESPONSE",       desc: "Unexpected or invalid server response" },
+  { code: 13, code_name: "ERR_SEND_PREFS_HTTP_FAIL",           desc: "HTTP request for preferences failed" },
+  { code: 14, code_name: "ERR_SEND_PREFS_HTTP_FAIL_RESPONSE",  desc: "Invalid preferences HTTP response" },
+  { code: 15, code_name: "ERR_SEND_ERRORS_HTTP_FAIL",          desc: "HTTP request for error log failed" },
+  { code: 16, code_name: "ERR_SEND_ERRORS_HTTP_FAIL_RESPONSE", desc: "Invalid error log HTTP response" },
+
+  // ---- DIRECTION WIND VANE (20–26) ----
+  { code: 20, code_name: "ERR_DIR_READ",           desc: "Direction read failed" },
+  { code: 21, code_name: "ERR_DIR_READ_ONCE",      desc: "Direction read required retry" },
+  { code: 22, code_name: "ERR_DIR_NOT_CONNECTED",  desc: "Direction sensor not connected" },
+  { code: 23, code_name: "ERR_DIR_SHORT_BUF_FULL", desc: "Direction short buffer full" },
+  { code: 24, code_name: "ERR_DIR_SDA_NOT_CONN",   desc: "Direction sensor SDA not connected" },
+  { code: 25, code_name: "ERR_DIR_SCL_NOT_CONN",   desc: "Direction sensor SCL not connected" },
+  { code: 26, code_name: "ERR_DIR_MAG_WEAK",       desc: "Magnetic field too weak for direction sensor" },
+
+  // ---- WIND (30–31) ----
+  { code: 30, code_name: "ERR_WIND_BUF_OVERWRITE",  desc: "Wind buffer overwrite" },
+  { code: 31, code_name: "ERR_WIND_SHORT_BUF_FULL", desc: "Wind short buffer full" },
+
+  // ---- TEMP (40) ----
+  { code: 40, code_name: "ERR_TEMP_READ", desc: "Temperature read failed" },
+
+  // ---- POWER / RESET (52–56) ----
+  { code: 52, code_name: "ERR_RESET_BROWNOUT",      desc: "Brown-out / low voltage reset" },
+  { code: 53, code_name: "ERR_RESET_PANIC",         desc: "Software panic / abort reset" },
+  { code: 54, code_name: "ERR_RESET_WDT",           desc: "Watchdog timer reset" },
+  { code: 55, code_name: "ERR_RESET_UNEXPECTED",    desc: "Unexpected or unclassified reset" },
+  { code: 56, code_name: "ERR_CANT_SEND_FORCE_RST", desc: "Failed to send before forced reset" },
+
+  // ---- LOG / INFO (70–71) ----
+  { code: 70, code_name: "LOG_RESET_SW",       desc: "Software reset (info log)" },
+  { code: 71, code_name: "LOG_RESET_POWERON",  desc: "Power-on reset (info log)" },
 ];
 
 
 
 function errorNumToStr(errorNum) {
-  const item = ErrorCodeStrings[errorNum];
-  return item ? `${item.code_name} (${errorNum})` : "Unknown ErrorCode";
+  const item = ErrorCodeStrings.find(e => e.code === errorNum);
+  return item ? `${item.code_name} (${errorNum})` : `${errorNum}`;
 }
 
 function formatErrors(errors) {

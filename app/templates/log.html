@@ -16,7 +16,7 @@
     <ul>
     {% for filename in log_filenames %}
         <!-- Each filename links to the new specific log file route -->
-        <li><a href="/veter/log/{{ filename }}">{{ filename }}</a></li>
+        <li><a href="{{ path_prefix }}/log/{{ filename }}">{{ filename }}</a></li>
     {% endfor %}
     </ul>
 {% else %}

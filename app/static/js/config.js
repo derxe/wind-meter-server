@@ -33,6 +33,35 @@ $(function() {
   //showPreferences();
   loadPreferencesHistory();
 
+  $('#btnShowAvailablePrefs').on('click', function () {
+    const btn = $(this);
+    const root = $("#availablePrefs");
+    if (root.is(":visible")) {
+      root.hide();
+      btn.text("Show");
+    } else {
+      root.show();
+      btn.text("Hide");
+    }
+  });
+
+  $('#btnShowAutoRefresh').on('click', function () {
+    const btn = $(this);
+    const root = $("#autoRefresh");
+    if (root.is(":visible")) {
+      root.hide();
+      btn.text("Start auto refresh");
+      autoRefreshStreamData(0);
+    } else {
+      root.show();
+      btn.text("Stop");
+      autoRefreshStreamData(500);
+    }
+
+  }); 
+
+  loadAvailablePreferences();
+
   $('#btnSendPrefs').on('click', function () { uploadPreferences(); });
 
 
@@ -48,6 +77,104 @@ $(function() {
     $("#prefPickedUpDate").html("No preferences yet configured");
   }
 });
+
+
+function autoRefreshStreamData(interval = 1000) {
+  if (autoRefreshStreamData._timerId) {
+    clearInterval(autoRefreshStreamData._timerId);
+    autoRefreshStreamData._timerId = null;
+  }
+
+  if (interval === 0) return () => {};
+
+  const imsi = stationData && stationData.imsi ? String(stationData.imsi) : "";
+  if (!imsi) return () => {};
+
+  const root = document.getElementById("autoRefresh") || document.getElementById("logs-value");
+  if (!root) return () => {};
+
+  if (!root.querySelector("[data-stream-summary]")) {
+    root.innerHTML = `
+      <div data-stream-summary class="mb-2 grid grid-cols-3 gap-2">
+        <div class="rounded bg-slate-100 px-2 py-1"><span class="text-xs text-slate-500">Speed</span><div data-stream-spd class="font-mono text-sm">--</div><div data-stream-spd-ms class="font-mono text-sm">--</div></div>
+        <div class="rounded bg-slate-100 px-2 py-1"><span class="text-xs text-slate-500">Direction</span><div data-stream-dir class="font-mono text-sm">--</div></div>
+        <div class="rounded bg-slate-100 px-2 py-1"><span class="text-xs text-slate-500">Battery</span><div data-stream-bat class="font-mono text-sm">--</div></div>
+      </div>
+      <div data-stream-log class="max-h-[18rem] overflow-y-auto rounded bg-slate-50 p-2 text-xs font-mono whitespace-pre"></div>
+    `;
+  }
+
+  const spdEl = root.querySelector("[data-stream-spd]");
+  const spdMsEl = root.querySelector("[data-stream-spd-ms]");
+  const dirEl = root.querySelector("[data-stream-dir]");
+  const batEl = root.querySelector("[data-stream-bat]");
+  const logEl = root.querySelector("[data-stream-log]");
+
+  const url = `https://to-ni.dev/veter/log/stream_${imsi}.txt?lines=30`;
+  let lastText = "";
+  let inFlight = false;
+
+  function parseLine(line) {
+    const m = line.match(/^\s*(\d+)\s+([^\s]+)-\s*(.*)\s*$/);
+    if (!m) return null;
+
+    const q = new URLSearchParams(m[3]);
+    return {
+      raw: line,
+      idx: Number(m[1]),
+      timestamp: m[2],
+      spd: q.get("spd"),
+      dir: q.get("dir"),
+      bat: q.get("bat"),
+    };
+  }
+
+  async function tick() {
+    if (inFlight) return;
+    inFlight = true;
+
+    try {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) return;
+
+      const text = await resp.text();
+      if (text === lastText) return;
+      lastText = text;
+
+      const rows = text
+        .split(/\r?\n/)
+        .map(parseLine)
+        .filter(Boolean)
+        .slice(0, 30);
+
+      if (!rows.length) return;
+
+      const latest = rows[0];
+      spdEl.textContent = latest.spd ?? "--";
+      spdMsEl.textContent = latest.spd ? `${(Number(latest.spd) * 0.091667).toFixed(2)} m/s` : "--";
+      dirEl.textContent = latest.dir ?? "--";
+      batEl.textContent = latest.bat ?? "--";
+      logEl.textContent = rows.map(r => r.raw).join("\n");
+      logEl.scrollTop = 0;
+    } catch (err) {
+      console.debug("stream refresh failed", err);
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  tick();
+  const timerId = setInterval(tick, Math.max(1000, interval));
+  autoRefreshStreamData._timerId = timerId;
+  return () => clearInterval(timerId);
+}
+
+function loadAvailablePreferences() {
+  const root = document.getElementById("availablePrefs");
+
+  
+
+}
 
 function uploadPreferences() {
   const confirmed = $("#confirmSendPrefs").is(":checked");
@@ -73,7 +200,7 @@ function uploadPreferences() {
 }
 
 function loadPreferencesHistory() {
-  $.get(`https://to-ni.dev/veter/log/prefs_${stationData.imsi}.txt`, function (text) {
+  $.get(`https://to-ni.dev/veter/log/prefs_${stationData.name}_${stationData.imsi}.txt`, function (text) {
     displayPreferencesHistory(text);
   });
 }
@@ -239,12 +366,6 @@ function renderHistoryCard(entry, changes, prevEntry) {
   const right = document.createElement("div");
   right.className = "flex items-center gap-2";
 
-  const toggleBtn = document.createElement("button");
-  toggleBtn.className = "border rounded px-2 py-1 text-xs";
-  toggleBtn.textContent = "Details";
-
-  right.appendChild(toggleBtn);
-
   header.appendChild(left);
   header.appendChild(right);
 
@@ -280,6 +401,10 @@ function renderHistoryCard(entry, changes, prevEntry) {
     changesBox.appendChild(first);
   }
 
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "border rounded mt-2 px-2 py-1 text-xs cursor-pointer";
+  toggleBtn.textContent = "Details";
+
   // Details (collapsed)
   const details = document.createElement("pre");
   details.className = "mt-2 border rounded p-2 text-xs font-mono whitespace-pre overflow-auto bg-slate-50 hidden max-h-[20rem]";
@@ -298,6 +423,7 @@ function renderHistoryCard(entry, changes, prevEntry) {
 
   card.appendChild(header);
   card.appendChild(changesBox);
+  card.appendChild(toggleBtn);
   card.appendChild(details);
 
   return card;
@@ -319,7 +445,7 @@ function prefsToLines(prefsObj) {
     ordered.push(k);
   }
 
-  return ordered.map(k => `${k}=${String(prefsObj[k])}`);
+  return ordered.map(k => `${k}: ${String(prefsObj[k])}`);
 }
 
 function formatVal(v) {

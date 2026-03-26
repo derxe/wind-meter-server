@@ -51,6 +51,29 @@ function formattedDate(isoString) {
   return `${dd}.${mm}.${yy} - ${hh}:${min}`;
 }
 
+function clearChartTouchHover(chart) {
+  if (!chart) return;
+  chart.setActiveElements([]);
+  if (chart.tooltip) {
+    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  }
+  chart.update('none');
+}
+
+function attachTouchHoverCleanup(chart) {
+  if (!chart || chart.$touchCleanupBound) return;
+  chart.$touchCleanupBound = true;
+
+  const clear = () => clearChartTouchHover(chart);
+  const clearWhenTouchOutside = (e) => {
+    if (!chart.canvas.contains(e.target)) clear();
+  };
+
+  chart.canvas.addEventListener('touchend', clear, { passive: true });
+  chart.canvas.addEventListener('touchcancel', clear, { passive: true });
+  document.addEventListener('touchstart', clearWhenTouchOutside, { passive: true });
+}
+
 
 let tempChart;
 let maxTemp;
@@ -171,6 +194,7 @@ function updateTempGraph(data) {
       ]
     },
     options: {
+      events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove', 'touchend', 'touchcancel'],
       interaction: {
         mode: 'index',      
         intersect: false,   
@@ -256,8 +280,16 @@ function updateTempGraph(data) {
     },
     plugins: [verticalLinePlugin],
   });
-}
 
+  attachTouchHoverCleanup(tempChart);
+  }
+
+  // set max X axis to the current date if the data is older then 20 minutes
+  let maxDate = Math.max(...tempData.map(p => p.x));
+  if(Date.now() - maxDate > 20*60*1000) {
+    tempChart.options.scales.x.max = Date.now();
+  }
+  
 
   tempChart.options.scales.yTemp.min = minTemp;
   tempChart.options.scales.yTemp.max = maxTemp;

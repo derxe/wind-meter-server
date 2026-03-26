@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=3" />
+  <title>vetr.si - Landing Mock</title>
+
+  <script data-goatcounter="https://stats.to-ni.dev/count" async src="//stats.to-ni.dev/count.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style>
+    html { touch-action: manipulation; }
+
+    .map-surface {
+      background:
+        radial-gradient(circle at 20% 15%, rgba(148, 163, 184, 0.15), transparent 35%),
+        radial-gradient(circle at 80% 70%, rgba(56, 189, 248, 0.14), transparent 30%),
+        linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    }
+
+    .map-grid {
+      background-image:
+        linear-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.18) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .station-dot {
+      transform: translate(-50%, -50%);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.95), 0 4px 12px rgba(15, 23, 42, .22);
+    }
+
+    .station-dot:hover {
+      transform: translate(-50%, -50%) scale(1.12);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.95), 0 6px 18px rgba(15, 23, 42, .32);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-indigo-50 text-slate-900">
+  <header class="relative bg-white border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-semibold">vetr.si - Landing Mock</h1>
+        <p class="text-sm text-slate-500">Pregled vseh postaj (mock prikaz)</p>
+      </div>
+      <a href="{{ path_prefix }}/"
+         class="px-3 py-1.5 text-sm rounded-lg text-slate-600 bg-slate-100 hover:text-slate-800 hover:bg-slate-200">
+        Nazaj
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 py-5 grid gap-6 lg:grid-cols-3">
+    <section class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h2 class="font-semibold text-base sm:text-lg">Mock mapa postaj</h2>
+        <span class="text-xs text-slate-500">{{ stations|length }} postaj</span>
+      </div>
+
+      <div class="relative w-full aspect-[16/10] rounded-2xl border border-slate-200 overflow-hidden map-surface map-grid">
+        {% for station in stations %}
+          <a
+            href="{{ path_prefix }}/{{ station.name }}"
+            class="station-dot absolute w-3.5 h-3.5 rounded-full bg-sky-500 hover:bg-sky-600"
+            style="left: {{ station.map_x }}%; top: {{ station.map_y }}%;"
+            title="{{ station.full_name }} | Avg {{ station.mock_avg }} m/s, Max {{ station.mock_max }} m/s, {{ station.mock_direction_cardinal }}"
+            aria-label="{{ station.full_name }}">
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+
+    <aside class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <h2 class="font-semibold text-base sm:text-lg mb-3">Seznam postaj</h2>
+
+      <div class="overflow-hidden rounded-xl border border-slate-200">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left font-medium px-3 py-2">Postaja</th>
+              <th class="text-right font-medium px-3 py-2">Avg</th>
+              <th class="text-right font-medium px-3 py-2">Max</th>
+              <th class="text-right font-medium px-3 py-2">Smer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for station in stations %}
+              <tr class="border-t border-slate-100 hover:bg-slate-50">
+                <td class="px-3 py-2">
+                  <a href="{{ path_prefix }}/{{ station.name }}" class="text-slate-700 hover:text-sky-700">
+                    {{ station.full_name }}
+                  </a>
+                </td>
+                <td class="px-3 py-2 text-right text-slate-700">{{ station.mock_avg }} m/s</td>
+                <td class="px-3 py-2 text-right text-slate-700">{{ station.mock_max }} m/s</td>
+                <td class="px-3 py-2 text-right text-slate-700">{{ station.mock_direction_cardinal }}</td>
+              </tr>
+            {% endfor %}
+            {% if stations|length == 0 %}
+              <tr>
+                <td colspan="4" class="px-3 py-4 text-center text-slate-500">Ni postaj za prikaz.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

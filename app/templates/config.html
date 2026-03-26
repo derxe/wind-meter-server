@@ -32,13 +32,12 @@
     <div class="relative" >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <button
-            id="back-btn" class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
+          <a href="{{ path_prefix }}/{{ station.name }}" class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
                   hover:bg-slate-200 active:bg-slate-300 transition" aria-label="Back" >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
             </svg>
-          </button>
+          </a>
           <h1 class="text-lg leading-tight">
             Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span> configuration
           </h1>
@@ -107,18 +106,34 @@ sleep_hour_end:8
                 </label>
               </div>
 
-
             <button id="btnSendPrefs"
                     class="border rounded px-3 py-1 text-sm disabled:opacity-50">
               Upload
             </button>
             </div>
 
-
-
             <div class="text-sm mt-2">Preferences to send to station on:
                 <span class="font-bold" id="prefPickedUpDate">---</span>
             </div>
+          </div>
+
+          <div class="mt-3 border rounded p-2">
+            <div class="font-semibold text-base">Available preferences for the device:</div>
+            <button id="btnShowAvailablePrefs" class="border rounded px-3 py-1 text-sm disabled:opacity-50">
+              Show
+            </button>
+
+            <div id="availablePrefs" ></div>
+          </div>
+
+
+          <div class="mt-3 border rounded p-2">
+            <div class="font-semibold text-base">Auto refresh stream data:</div>
+            <button id="btnShowAutoRefresh" class="border rounded px-3 py-1 text-sm disabled:opacity-50">
+              Start auto refresh
+            </button>
+
+            <div id="autoRefresh" ></div>
           </div>
 
         </div>
@@ -127,9 +142,6 @@ sleep_hour_end:8
           <div id="prefs" class="flex flex-col gap-2 w-full"></div>
         </div>
 
-       
-
-        
 
       </div>
 

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vetr.si | Real-time Wind Monitoring</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-100 min-h-screen text-slate-800">
+
+    <nav class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto">
+        <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">V</div>
+            <span class="text-xl font-semibold tracking-tight"><b>vetr</b>.si</span>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 pb-20">
+        <header class="mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900 mb-4 tracking-tight">Slovenia's Wind Network</h1>
+            <p class="text-slate-500 max-w-xl text-lg">Real-time data from localized weather stations across the region. Transparent, accurate, and hyper-local.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-2 relative group">
+                <div class="absolute inset-0 bg-indigo-200 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition"></div>
+                <div class="relative glass border border-white rounded-3xl h-[500px] shadow-xl overflow-hidden">
+                    <div class="absolute inset-0 bg-slate-200 flex items-center justify-center overflow-hidden">
+                        <div class="absolute inset-0 opacity-40 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                        <div class="relative w-full h-full bg-indigo-50 flex items-center justify-center">
+                            <div class="absolute top-1/4 left-1/3 animate-bounce">
+                                <div class="w-4 h-4 bg-indigo-600 rounded-full border-2 border-white shadow-lg"></div>
+                                <div class="absolute -top-10 -left-8 bg-white px-3 py-1 rounded-xl shadow-lg text-xs font-bold">Vremščica</div>
+                            </div>
+                            <div class="absolute top-1/2 right-1/4">
+                                <div class="w-4 h-4 bg-indigo-600 rounded-full border-2 border-white shadow-lg"></div>
+                                <div class="absolute -top-10 -left-6 bg-white px-3 py-1 rounded-xl shadow-lg text-xs font-bold">Nanos</div>
+                            </div>
+                             <div class="absolute bottom-1/3 left-1/2">
+                                <div class="w-4 h-4 bg-rose-500 rounded-full border-2 border-white shadow-lg"></div>
+                                <div class="absolute -top-10 -left-4 bg-white px-3 py-1 rounded-xl shadow-lg text-xs font-bold text-rose-500">Offline</div>
+                            </div>
+                            <span class="text-slate-400 font-medium">Interactive Map View</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1 space-y-6">
+                <div class="flex items-center justify-between px-2">
+                    <h3 class="text-lg font-bold text-slate-900">Live Stations</h3>
+                    <span class="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-1 rounded-md">8 Online</span>
+                </div>
+
+                <div class="space-y-4 max-h-[440px] overflow-y-auto pr-2 custom-scrollbar">
+                    
+                    <div class="glass border border-white p-5 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h4 class="font-bold text-slate-900">Vremščica</h4>
+                                <p class="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Updated 2m ago</p>
+                            </div>
+                            <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Avg Speed</p>
+                                <p class="text-xl font-semibold">14.2 <span class="text-xs font-normal">km/h</span></p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Max Gust</p>
+                                <p class="text-xl font-semibold text-indigo-600">28.5 <span class="text-xs font-normal">km/h</span></p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-slate-100 flex items-center space-x-2">
+                            <div class="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center">
+                                <span class="transform rotate-[45deg] text-xs">↑</span>
+                            </div>
+                            <span class="text-xs text-slate-500 font-medium tracking-wide">Direction: NE (45°)</span>
+                        </div>
+                    </div>
+
+                    <div class="glass border border-white p-5 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h4 class="font-bold text-slate-900">Ajovščina Hub</h4>
+                                <p class="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Updated 5m ago</p>
+                            </div>
+                            <span class="flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Avg Speed</p>
+                                <p class="text-xl font-semibold">8.1 <span class="text-xs font-normal">km/h</span></p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Max Gust</p>
+                                <p class="text-xl font-semibold text-indigo-600">12.0 <span class="text-xs font-normal">km/h</span></p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-slate-100 flex items-center space-x-2">
+                            <div class="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center">
+                                <span class="transform rotate-[180deg] text-xs">↑</span>
+                            </div>
+                            <span class="text-xs text-slate-500 font-medium tracking-wide">Direction: S (180°)</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50/50 border border-slate-200 p-5 rounded-2xl opacity-60">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h4 class="font-bold text-slate-500">Postojna Gate</h4>
+                                <p class="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Last seen 4h ago</p>
+                            </div>
+                            <span class="flex h-2 w-2 rounded-full bg-rose-400"></span>
+                        </div>
+                        <p class="text-xs text-slate-400 italic">Station currently offline for maintenance.</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

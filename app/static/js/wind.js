@@ -22,10 +22,10 @@ $(function() {
       updateMaxAvgUnit();
     })
 
-    $("#double-click-show-detailed").on("dblclick", function () {
+    $("#show-detailed").on("click", function () {
       toggleDetailedDisplay();
-
-      $(this).css("color", detailedShown? "green" : "");
+      
+      $("#heart-icon").html(detailedShown? "💖" : "❤️");
     });
 });
 
@@ -131,6 +131,7 @@ function loadWindData() {
     const base = window.location.pathname;
     $.getJSON(`${base}/data/wind.json?duration=${displayDuration}`, function(data) {
         showLoading(false);
+        logDisplayedTimeWindow(data);
         updateWindGraph(data);
         updateDirectionGraph(data);
     });
@@ -140,8 +141,31 @@ function showPreloadedData() {
   showLoading(false);
 
   data = preloadedWindData;
+  logDisplayedTimeWindow(data);
   updateWindGraph(data);
   updateDirectionGraph(data);
+}
+
+function logDisplayedTimeWindow(data) {
+  if (!Array.isArray(data) || data.length === 0) {
+    console.log("Display time window: no data");
+    return;
+  }
+
+  const timestamps = data
+    .map(d => new Date(d.timestamp).getTime())
+    .filter(ts => !Number.isNaN(ts))
+    .sort((a, b) => a - b);
+
+  if (timestamps.length === 0) {
+    console.log("Display time window: no valid timestamps");
+    return;
+  }
+
+  console.log("Display time window:", {
+    minDate: new Date(timestamps[0]).toISOString(),
+    maxDate: new Date(timestamps[timestamps.length - 1]).toISOString(),
+  });
 }
 
 function updateMaxAvgUnit() {
@@ -235,7 +259,33 @@ function formattedDate(isoString) {
 let windChart;
 let lastAvgValue;
 let lastMaxValue;
+
+function clearChartTouchHover(chart) {
+  if (!chart) return;
+  chart.setActiveElements([]);
+  if (chart.tooltip) {
+    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  }
+  chart.update('none');
+}
+
+function attachTouchHoverCleanup(chart) {
+  if (!chart || chart.$touchCleanupBound) return;
+  chart.$touchCleanupBound = true;
+
+  const clear = () => clearChartTouchHover(chart);
+  const clearWhenTouchOutside = (e) => {
+    if (!chart.canvas.contains(e.target)) clear();
+  };
+
+  chart.canvas.addEventListener('touchend', clear, { passive: true });
+  chart.canvas.addEventListener('touchcancel', clear, { passive: true });
+  document.addEventListener('touchstart', clearWhenTouchOutside, { passive: true });
+}
+
 function updateWindGraph(data) {
+  data = data.filter(d => d.avg !== null && d.max !== null); // Remove null values
+
   if (data.length === 0 ) {
     $('#wind-no-data-to-show').show();
     $('#wind-chart').hide();
@@ -244,6 +294,7 @@ function updateWindGraph(data) {
 
   $('#wind-no-data-to-show').hide();
   $('#wind-chart').show();
+
 
   data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const avgGrid = data.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.avg}));
@@ -312,6 +363,7 @@ function updateWindGraph(data) {
         ]
         },
         options: {
+          events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove', 'touchend', 'touchcancel'],
           interaction: {
             mode: 'index',      
             intersect: false,   
@@ -370,6 +422,7 @@ function updateWindGraph(data) {
         //plugins: [midnightLinesPlugin]
     });
 
+    attachTouchHoverCleanup(windChart);
 
   }
 
@@ -396,6 +449,9 @@ function updateWindGraph(data) {
 
 let dirChart;
 function updateDirectionGraph(data) {
+    data = data.filter(d => d.dir !== null && d.dir !== undefined);
+    data.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
     if (data.length === 0 ) {
       $('#dir-no-data-to-show').show();
       $('#dir-chart').hide();
@@ -445,6 +501,7 @@ function updateDirectionGraph(data) {
           ]
           },
           options: {
+            events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove', 'touchend', 'touchcancel'],
             interaction: {
               mode: 'index',      
               intersect: false,   
@@ -533,6 +590,8 @@ function updateDirectionGraph(data) {
           },
           plugins: [ChartDataLabels, verticalLinePlugin]
       });
+
+      attachTouchHoverCleanup(dirChart);
   }
 
   dirChart.data.datasets[0].data = dirGrid;

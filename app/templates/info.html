@@ -31,13 +31,12 @@
     <div class="relative" >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-3 pt-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <button
-            id="back-btn" class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
+          <a href="{{ path_prefix }}/{{ station.name }}" class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-600
                   hover:bg-slate-200 active:bg-slate-300 transition" aria-label="Back" >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
             </svg>
-          </button>
+          </a>
           <h1 class="text-lg leading-tight">
             Vetrna Postaja - <span class="text-xl font-semibold">{{ title }}</span>
           </h1>
@@ -89,6 +88,12 @@
         
         <!-- Status info text values -->
         <div id="status-info" class="mt-4 grid gap-1 text-sm"> </div>
+
+        <div class="mt-4">
+          <a href="{{ path_prefix }}/{{ station.name }}/config" class="px-3 py-1 text-sm rounded text-slate-500 bg-slate-100 hover:text-slate-800 hover:bg-slate-300">
+            Konfiguracija
+          </a>
+        </div>
 
       </div>
     </section>

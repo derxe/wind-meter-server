@@ -805,7 +805,7 @@ def get_status_updates(duration_hours=None, fromToday=False):
 
     return data
 
-def get_wind(station_name, duration_hours: int = 6):
+def get_wind_all(station_name, duration_hours: int = 6):
     duration_shift = 0
     end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
     start_time = end_time - timedelta(hours=duration_hours)
@@ -828,7 +828,7 @@ def get_wind(station_name, duration_hours: int = 6):
     return data
 
 
-def get_directions(station_name, duration_hours=6):
+def get_directions_all(station_name, duration_hours=6):
     duration_shift = 0
     end_time = datetime.now(TZ) - timedelta(hours=duration_shift)
     start_time = end_time - timedelta(hours=duration_hours)
@@ -895,7 +895,7 @@ def get_temp(station_name, duration_hours=6):
     return filtered_data
 
 
-def get_bucketed_data(station_name, duration_hours=6):
+def get_wind_data(station_name, duration_hours=6):
     logging.info(f"Fetching bucketed data from the last {duration_hours} hours. For:{station_name}")
     start_time = datetime.now(TZ) - timedelta(hours=duration_hours)
 
@@ -936,6 +936,78 @@ def get_bucketed_data(station_name, duration_hours=6):
         })
     
     return merged
+
+
+def get_last_wind(station_name=None):
+    query = {}
+    if station_name is not None:
+        query["station_name"] = {"$eq": station_name}
+
+    latest_wind = db.wind_bucketed.find_one(
+        query,
+        {"_id": 0, "station_name": 1, "timestamp": 1, "avg": 1, "max": 1, "avg_rpm": 1, "max_rpm": 1},
+        sort=[("timestamp", -1)]
+    )
+
+    if latest_wind is None:
+        logging.warning("Unable to get last wind from the DB.")
+        return None
+
+    direction_doc = db.dir_bucketed.find_one(
+        {
+            "station_name": {"$eq": latest_wind["station_name"]},
+            "timestamp": {"$eq": latest_wind["timestamp"]},
+        },
+        {"_id": 0, "mode": 1}
+    )
+
+    speed_rpm_to_ms = get_station_speed_to_rpm(latest_wind["station_name"])
+    avg = latest_wind.get("avg")
+    if avg is None and "avg_rpm" in latest_wind:
+        avg = latest_wind["avg_rpm"] * speed_rpm_to_ms
+
+    max_speed = latest_wind.get("max")
+    if max_speed is None and "max_rpm" in latest_wind:
+        max_speed = latest_wind["max_rpm"] * speed_rpm_to_ms
+
+    return {
+        "station_name": latest_wind["station_name"],
+        "timestamp": latest_wind["timestamp"].astimezone(TZ).isoformat(),
+        "avg": avg,
+        "max": max_speed,
+        "dir": direction_doc.get("mode") if direction_doc is not None else None,
+    }
+
+
+def get_last_temp(station_name=None):
+    query = {}
+    if station_name is not None:
+        query["station_name"] = {"$eq": station_name}
+
+    latest_status = db.statuses.find_one(
+        query,
+        {"_id": 0, "station_name": 1, "timestamp": 1, "temp": 1, "hum": 1, "temp_in": 1, "hum_in": 1},
+        sort=[("timestamp", -1)]
+    )
+
+    if latest_status is None:
+        logging.warning("Unable to get last temp from the DB.")
+        return None
+
+    result = {
+        "station_name": latest_status["station_name"],
+        "timestamp": latest_status["timestamp"].astimezone(TZ).isoformat(),
+        "temp": float(latest_status["temp"]) if latest_status.get("temp") != "nan" and "temp" in latest_status else None,
+        "hum": int(latest_status["hum"]) if latest_status.get("hum") != "nan" and "hum" in latest_status else None,
+    }
+
+    if "temp_in" in latest_status:
+        result["temp_in"] = float(latest_status["temp_in"]) if latest_status["temp_in"] != "nan" else None
+
+    if "hum_in" in latest_status:
+        result["hum_in"] = int(latest_status["hum_in"]) if latest_status["hum_in"] != "nan" else None
+
+    return result
 
 
 """
@@ -1567,5 +1639,4 @@ if __name__ == "__main__":
 
     #print("Parsed Status Update:")
     #print(json.dumps(parse_status_update(line), indent=2))
-
 

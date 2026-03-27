@@ -32,8 +32,9 @@ $(function() {
 
 let detailedShown = false;
 function toggleDetailedDisplay() {
-  console.log("Wind speed title dbl clicked: detailedShown:", detailedShown, "all_wind_data len:", all_wind_data.winds.length);
   if(!all_wind_data) return; // all_wind_data hasnt be loaded yet
+  console.log("Wind speed title dbl clicked: detailedShown:", detailedShown, "all_wind_data len:", all_wind_data.winds.length);
+
   if(!detailedShown) {
     if(!windChart.data.datasets[2]) {
       // only add NEW dataset if avgPOints are not set yet 

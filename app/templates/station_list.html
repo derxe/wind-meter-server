@@ -6,28 +6,38 @@
     <title>Vetrne postaje</title>
     <script data-goatcounter="https://stats.to-ni.dev/count" async src="//stats.to-ni.dev/count.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="{{ path_prefix }}/static/js/status_update.js"></script>
+    <script src="{{ path_prefix }}/static/js/station_list.js"></script>
 </head>
+
+<script>
+    const data = {{ data | tojson }};
+    const pathPrefix = {{ path_prefix | tojson }};
+</script>
+
+
 <body class="min-h-screen bg-indigo-50 text-slate-900">
     <div class="relative overflow-hidden">
         <div class="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-sky-200/70 via-indigo-100/40 to-transparent"></div>
         <div class="absolute -top-16 left-1/2 h-56 w-[42rem] -translate-x-1/2 rounded-full bg-white/55 blur-3xl"></div>
 
         <header class="relative">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-4">
+
+
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-4">
                 <div class="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 shadow-sm backdrop-blur">
-                    <div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-400/20 via-cyan-300/10 to-indigo-400/20"></div>
-                    <div class="relative px-6 py-6 sm:px-8 sm:py-8">
+                    <div class="absolute inset-x-0 top-0 sm:h-24 h-21 bg-gradient-to-r from-sky-400/20 via-cyan-300/10 to-indigo-400/20"></div>
+                    <div class="relative px-4 py-4 sm:px-8 sm:py-8">
                         <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                             <div class="max-w-2xl">
-                                <div class="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium tracking-[0.18em] text-sky-700 uppercase">
+                                <h1 class="text-4xl sm:text-[2.5rem] justify-self-center sm:justify-self-start mt-4 sm:mb-4 mb-6 font-bold text-purple-500 font-sans">to-ni.dev</h1>
+
+                                <button
+                                    id="station-visibility-toggle"
+                                    type="button"
+                                    class="justify-self-center sm:inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium tracking-[0.18em] text-sky-700 uppercase transition hover:border-sky-300 hover:bg-sky-100" >
                                     Paragliding Wind Stations
-                                </div>
-                                <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-                                    Vetrne postaje
-                                </h1>
-                                <p class="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-                                    Izberi postajo:
-                                </p>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -35,63 +45,12 @@
             </div>
         </header>
 
-        <main class="relative max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-4">
-            <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {% for station in data.stations %}
-                    {% if station.active %}
-                    <a
-                        href="{{ path_prefix }}/{{ station.name }}"
-                        class="group relative overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-lg"
-                    >
-                        <div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-br from-sky-300/25 via-cyan-200/15 to-transparent"></div>
-                        <div class="relative flex h-full flex-col">
-                            <div class="flex items-start justify-between gap-4">
-                                <div>
-                                    <div class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-700">
-                                        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                                        Online
-                                    </div>
-                                    <h2 class="mt-4 text-xl font-semibold tracking-tight text-slate-900">
-                                        {{ station.full_name or station.name }}
-                                    </h2>
-                                    <p class="mt-1 text-sm text-slate-500">
-                                        {{ station.name }}
-                                    </p>
-                                </div>
-
-                                <div class="rounded-2xl bg-slate-100 p-3 text-slate-500 transition group-hover:bg-sky-100 group-hover:text-sky-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M13.172 11 8.222 6.05l1.414-1.414L16 11l-6.364 6.364-1.414-1.414z"/>
-                                    </svg>
-                                </div>
-                            </div>
-
-                            <div class="mt-6 grid grid-cols-2 gap-3 text-sm text-slate-600">
-                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    <div class="text-xs uppercase tracking-[0.16em] text-slate-400">Tip</div>
-                                    <div class="mt-2 font-medium text-slate-700">Veter</div>
-                                </div>
-                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    <div class="text-xs uppercase tracking-[0.16em] text-slate-400">Dostop</div>
-                                    <div class="mt-2 font-medium text-slate-700">Podrobnosti</div>
-                                </div>
-                            </div>
-
-                            <div class="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 text-sm">
-                                <span class="text-slate-500">Odpri postajo</span>
-                                <span class="font-medium text-sky-700 transition group-hover:translate-x-0.5">
-                                    Pregled
-                                </span>
-                            </div>
-                        </div>
-                    </a>
-                    {% endif %}
-                {% endfor %}
-            </section>
+        <main class="relative max-w-6xl mx-auto px-4 sm:px-6 pb-10 pt-4">
+            <section id="station-list" class="grid gap-4 lg:grid-cols-2"></section>
         </main>
 
         <footer class="max-w-7xl mx-auto px-4 sm:px-6 pb-10 pt-2 text-xs text-slate-400">
-            © 2026 Paragliding Wind Station · Built with <span>❤️</span> for paragliding
+            © 2026 Paragliding Wind Station · Built with <span>❤️</span> for paragliding 🪂
         </footer>
     </div>
 </body>

@@ -117,54 +117,76 @@ function getSendInterval(prefs) {
   else return parseInt(prefs["send_data_interval_min"], 10);
 }
 
+function getStatusInfo(data, prefs, station) {
+  const safePrefs = prefs || {};
+  const stationInfo = station || {};
+  const timestamp = data?.timestamp;
+  const timeSinceLastSendMin = timestamp ? timeSinceMinutes(timestamp) : Number.POSITIVE_INFINITY;
+  const sendInterval = getSendInterval(safePrefs);
+  const sendIntervalOk = Math.min(sendInterval * 2.5, 40);
+  const sendIntervalError = 60 * 24 * 2;
+
+  let label = "--";
+  let statusClass = "status-offline";
+
+  if (timeSinceLastSendMin < sendIntervalOk) {
+    label = "Deluje";
+    statusClass = "status-ok";
+  } else if (timeSinceLastSendMin >= sendIntervalError) {
+    label = "Napaka";
+    statusClass = "status-error";
+  } else if (timeSinceLastSendMin >= sendIntervalOk) {
+    label = "Ni odziva";
+    statusClass = "status-non-responsive";
+  }
+
+  if (isDeviceInPowerSavingMode(safePrefs)) {
+    label = "Varčni način";
+    statusClass = "status-sleeping";
+  }
+
+  if (isDeviceSleeping(safePrefs)) {
+    label = "Naprava počiva";
+    statusClass = "status-sleeping";
+  }
+
+  if (stationInfo.status === "offline") {
+    label = "Začasno Onemogočena";
+    statusClass = "status-offline";
+  }
+
+  return {
+    label,
+    statusClass,
+    timeSinceLastSendMin,
+    sendInterval,
+  };
+}
+
 function updateStatusPannel(data, prefs) {
-  let timeSinceLastSendMin = timeSinceMinutes(data["timestamp"]);
+  const statusInfo = getStatusInfo(data, prefs, stationData);
+  let timeSinceLastSendMin = statusInfo.timeSinceLastSendMin;
   const timeSinceStr = formatTimeSince(data["timestamp"]);
   const time = formattedTime(data["timestamp"]);
 
-  let bubleText = "--";
+  let bubleText = statusInfo.label;
   let detailsText = "";
-  let statusClass = "status-offline"
-
-  const send_interval = getSendInterval(prefs);
-
-  // in minutes what we consider to be normal for the device to send data
-  const send_interval_OK = Math.min(send_interval * 2.5, 40); 
-  const send_interval_ERROR = 60 * 24 * 2; // no data send in 2 days
-
-  if(timeSinceLastSendMin < send_interval_OK) {
-    bubleText = "Deluje"
-    statusClass = "status-ok"
-  } else if(timeSinceLastSendMin >= send_interval_ERROR) {
-    bubleText = "Napaka"
-    statusClass = "status-error"
-  } else if(timeSinceLastSendMin >= send_interval_OK) {
-    bubleText = "Ni odziva 🤔"
-    statusClass = "status-non-responsive"
-  } 
-
-  if(stationData && stationData["status"] === "offline") {
-    bubleText = "Začasno Onemogočena";
-    statusClass = "status-offline"
-  }
+  let statusClass = statusInfo.statusClass;
+  const send_interval = statusInfo.sendInterval;
 
   if(isDeviceInPowerSavingMode(prefs)) {
-    bubleText = "🔋 Varčni način"
     if(prefs && prefs.sleep_enabled === "2") { 
       detailsText =  `Naprava varčuje z baterijo zato med <b>${prefs["sleep_hour_start"]}.</b> in <b>${prefs["sleep_hour_end"]}. uro</b> `;
       detailsText += `pošilja podatke samo vsakih ${send_interval} min<br>`;
     }
-    statusClass = "status-sleeping"
   }
 
   if(isDeviceSleeping(prefs)) {
-    bubleText = "Naprava počiva 😴"
     if(prefs && prefs.sleep_enabled === "2") { 
       detailsText = `Naprava med <b>${prefs["sleep_hour_start"]} uro</b> in <b>${prefs["sleep_hour_end"]} uro</b> pošilja podatke samo vsakih ${send_interval} min<br>`;
     } else {
       detailsText = `Naprava je nastavljena, da ne pošilja podatkov med <b>${sleepStart} uro</b> in <b>${sleepEnd} uro</b>.<br>`;
     }
-    statusClass = "status-sleeping"
   }
 
   //toggleOverlay("sleeping", isDeviceSleeping());

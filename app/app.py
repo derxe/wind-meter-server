@@ -119,11 +119,18 @@ def redirect_request_to_dev(sender_id, data):
 
 @app.route("/")
 def list_stations():
-    data = {
-        "stations": db.get_stations(),
-    }
-    
-    return render_template("station_list.html", data=data)
+    stations_data = []
+    for station in db.get_stations():
+        station_name = station["name"]
+        stations_data.append({
+            'station': station,
+            'prefsData': db.get_most_recent_prefs(station_name),
+            'statusData': db.get_last_status(station_name),
+            'windData': db.get_last_wind(station_name),
+            'tempData': db.get_last_temp(station_name),
+        })
+
+    return render_template("station_list.html", data=stations_data)
 
 
 def _clamp(value, low, high):
@@ -267,7 +274,7 @@ def status_return_multi(station_name):
 #@cache.cached(query_string=True)
 def wind_data(station_name):
     duration_hours = float(request.args.get("duration", "6"))
-    return db.get_bucketed_data(station_name, duration_hours=duration_hours)
+    return db.get_wind_data(station_name, duration_hours=duration_hours)
 
 @app.route("/<station_name>/data/temp.json", methods=["GET"])
 #@cache.cached(query_string=True)
@@ -280,8 +287,8 @@ def temperature_data(station_name):
 def wind_data_all(station_name):
     duration_hours = float(request.args.get("duration", "2"))
     data = {
-        "winds": db.get_wind(station_name, duration_hours=duration_hours),
-        "dirs": db.get_directions(station_name, duration_hours=duration_hours),
+        "winds": db.get_wind_all(station_name, duration_hours=duration_hours),
+        "dirs": db.get_directions_all(station_name, duration_hours=duration_hours),
     }
 
     return data
@@ -296,7 +303,7 @@ def wind_station(station_name):
         'station': station,
         'prefsData': db.get_most_recent_prefs(station_name),
         'statusData': db.get_last_status(station_name),
-        'windData': db.get_bucketed_data(station_name, duration_hours=6),
+        'windData': db.get_wind_data(station_name, duration_hours=6),
         'tempData': db.get_temp(station_name, duration_hours=6),
     }
     return render_template("wind.html", **data)

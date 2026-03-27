@@ -352,6 +352,7 @@ function drawRose(canvas, samples){
 const zero_bar_height = 6; // 6 % height for the bars that have 0%
 
 function drawLabelBarHeights(hist) {
+  if(!hist) return;
   // Izračun celotnega % po binu (čez vse sektorje)
   const totalsPerBin = Array(SPEED_BINS.length+1).fill(0);
   for(const sector of hist.pct){ sector.forEach((v,i)=> totalsPerBin[i]+=v); }

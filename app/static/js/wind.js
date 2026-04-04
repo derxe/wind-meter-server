@@ -36,55 +36,62 @@ function toggleDetailedDisplay() {
   console.log("Wind speed title dbl clicked: detailedShown:", detailedShown, "all_wind_data len:", all_wind_data.winds.length);
 
   if(!detailedShown) {
-    if(!windChart.data.datasets[2]) {
-      // only add NEW dataset if avgPOints are not set yet 
-      avgPoints = all_wind_data.winds.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value}));
-      const newDataset = {
-          label: "all",
-          data: avgPoints,
-          borderWidth: 0,
-          avgGrid: 0,
-          tension: 0,
-          pointRadius: 3,
-          borderColor: "#36a2ebFF",
-          backgroundColor: "#94cffa"
-      };
-      windChart.data.datasets[2] = newDataset;
-    } else {
-      windChart.data.datasets[2].hidden = false;
+
+    if(!!windChart?.data) {
+      if(!windChart.data.datasets[2]) {
+        // only add NEW dataset if avgPOints are not set yet 
+        avgPoints = all_wind_data.winds.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value}));
+        const newDataset = {
+            label: "all",
+            data: avgPoints,
+            borderWidth: 0,
+            avgGrid: 0,
+            tension: 0,
+            pointRadius: 3,
+            borderColor: "#36a2ebFF",
+            backgroundColor: "#94cffa"
+        };
+        windChart.data.datasets[2] = newDataset;
+      } else {
+        windChart.data.datasets[2].hidden = false;
+      }
     }
 
-    if(!dirChart.data.datasets[1]) { 
-      // only add NEW dataset if avgPOints are not set yet 
-      dirPoints = all_wind_data.dirs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
-      const newDataset = {
-          label: "smer2",
-          type: "scatter",
-          data: dirPoints,
-          borderWidth: 1,
-          pointRadius: 3,
-          borderColor: "#4cc0c0", 
-          backgroundColor: "#a5dfdf",
-          order: 1,
-          hidden: false,
-      };
-      dirChart.data.datasets[1] = newDataset;
-    } else {
-      dirChart.data.datasets[1].hidden = false;
-    }
+    if(!!dirChart?.data) {
+      if(!dirChart.data.datasets[1]) { 
+        // only add NEW dataset if avgPOints are not set yet 
+        dirPoints = all_wind_data.dirs.map(d => ({ x: new Date(d.timestamp).getTime(), y: d.value/360 * 8 }));
+        const newDataset = {
+            label: "smer2",
+            type: "scatter",
+            data: dirPoints,
+            borderWidth: 1,
+            pointRadius: 3,
+            borderColor: "#4cc0c0", 
+            backgroundColor: "#a5dfdf",
+            order: 1,
+            hidden: false,
+        };
+        dirChart.data.datasets[1] = newDataset;
+      } else {
+        dirChart.data.datasets[1].hidden = false;
+      }
+
+      dirChart.update();
+   }
 
   } else {
-    if(windChart.data.datasets[2]) {
+    if(!!windChart?.data && windChart.data.datasets[2]) {
       windChart.data.datasets[2].hidden = true;
     }
 
-    if(dirChart.data.datasets[1]) {
+    if(!!dirChart?.data && dirChart.data.datasets[1]) {
       dirChart.data.datasets[1].hidden = true;
     }
   }
 
-  windChart.update();
-  dirChart.update();
+  windChart?.update();
+  dirChart?.update();
   detailedShown = !detailedShown;
 }
 

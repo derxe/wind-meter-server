@@ -52,7 +52,6 @@ def ensure_indexes():
 ensure_indexes()
 
 
-
 def get_or_create_station(sender_id_imsi):
     if not sender_id_imsi:
         logging.warning("No IMSI to save")
@@ -232,7 +231,7 @@ def get_most_recent_prefs(station_name):
     #logging.info(f"Got most recent prefs for {station_name}: {most_recent_prefs}")
     return most_recent_prefs[0] if most_recent_prefs else {}
 
-def get_most_recent_n_prefs(station_name, count=1):
+def get_most_recent_n_prefs(station_name, count=10):
     prefs = list(db.prefs.find(
         {"station_name": station_name}, 
         { "_id":0 }

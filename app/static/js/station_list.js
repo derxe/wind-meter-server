@@ -73,7 +73,7 @@ function renderDirectionIndicator(directionIndex) {
             <div class="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-sky-600 shadow-sm">
                 ${directionArrow}
             </div>
-            <span class="ms-2 mt-1 text-2xl font-bold text-slate-500 font-mono place-self-end">${displayValue(directions[directionIndex])}</span>
+            <span class="ms-2 text-2xl font-bold text-slate-500 font-mono place-self-end">${displayValue(directions[directionIndex])}</span>
         </div>
     `;
 }
@@ -89,6 +89,11 @@ function updateStationVisibilityToggle() {
         : "Paragliding Wind Stations";
 }
 
+function isDataRecentEnough(timestamp) {
+    if(!timestamp) return false;
+    return timeSinceMinutes(timestamp) < 60; // data younget then 60 mins ago is considered fresh 
+}
+
 function renderStationCard(entry) {
     const station = entry?.station;
     if (!showAllStations && !station?.active) return "";
@@ -99,7 +104,11 @@ function renderStationCard(entry) {
     const lastSeen = lastTimestamp ? formatElapsedMinutes(timeSinceMinutes(lastTimestamp)) : "--";
     const statusInfo = getStatusInfo(entry?.statusData, prefs, station);
     const statusBadge = renderStatusBadge(statusInfo);
-    const directionIndicator = renderDirectionIndicator(windData.dir);
+
+
+    const directionIndicator = renderDirectionIndicator(isDataRecentEnough(windData.timestamp)? windData.dir : undefined);
+    const windSpeedAvg = isDataRecentEnough(windData.timestamp)? windData.avg?.toFixed(1) : undefined;
+    const windSpeedMax = isDataRecentEnough(windData.timestamp)? windData.max?.toFixed(1) : undefined;
 
     const stationMessage = !station.message? "" : `
     <div class="relative mt-3 mb-2 rounded-2xl border border-yellow-300 bg-yellow-50 shadow-sm p-2">
@@ -144,7 +153,7 @@ function renderStationCard(entry) {
                 <div class="mt-2 grid grid-cols-3 gap-3 text-sm text-slate-600">
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 grid content-between">
                         <div class="flex items-baseline justify-start gap-2 mb-1 ">
-                            <span class="text-2xl font-semibold text-sky-500/80">${escapeHtml(displayValue(windData.avg?.toFixed(1)))}</span>
+                            <span class="text-2xl font-semibold text-sky-500/80">${escapeHtml(displayValue(windSpeedAvg))}</span>
                             <span class="text-sm text-slate-400">m/s</span>
                         </div>
                         <div class="text-xs uppercase tracking-[0.16em] text-slate-400">povprečna</div>
@@ -152,7 +161,7 @@ function renderStationCard(entry) {
 
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 grid content-between">
                         <div class="flex items-baseline justify-start gap-2  ">
-                            <span class="text-2xl font-semibold text-rose-500/60">${escapeHtml(displayValue(windData.max?.toFixed(1)))}</span>
+                            <span class="text-2xl font-semibold text-rose-500/60">${escapeHtml(displayValue(windSpeedMax))}</span>
                             <span class="text-sm text-slate-400">m/s</span>
                         </div>
                         <div class="text-xs uppercase tracking-[0.16em] text-slate-400">sunki</div>

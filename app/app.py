@@ -244,6 +244,14 @@ def save_data_sender_id(sender_id):
     return Response(response, mimetype="text/plain")
 
 
+
+
+
+@app.route("/<station_name>/data/error_codes.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def get_error_codes(station_name):
+    return db.get_most_recent_error_codes(station_name)
+
 @app.route("/<station_name>/data/errors.json", methods=["GET"])
 #@cache.cached(query_string=True)
 def get_error_values(station_name):
@@ -292,6 +300,13 @@ def wind_data_all(station_name):
     }
 
     return data
+
+@app.route("/<station_name>/data/prefs.json", methods=["GET"])
+#@cache.cached(query_string=True)
+def device_preferences(station_name):
+    count = int(request.args.get("count", "10"))
+    return db.get_most_recent_n_prefs(station_name, count=count)
+
 
 @app.route("/<station_name>", methods=["GET"])
 def wind_station(station_name):

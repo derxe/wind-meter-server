@@ -46,6 +46,7 @@ let displayLogs = "raw";
 $(function() {
   showLoading(false);
   $('#chart-holder').hide();
+  loadErrorCodes();
   loadStatus();
 
   // populate dropdown with default values: 
@@ -616,62 +617,25 @@ function setDatasetColors(datasets, dataName, axis) {
   }
 }
 
-const ErrorCodeStrings = [
-  // ---- 0 ----
-  { code: 0,  code_name: "ERR_NONE", desc: "No error" },
+let loadedErrorCodes = [];
 
-  // ---- SEND / GSM / HTTP (1–16) ----
-  { code: 1,  code_name: "ERR_SEND_AT_FAIL",                  desc: "AT command failure" },
-  { code: 2,  code_name: "ERR_SEND_NO_SIM",                   desc: "No SIM card detected" },
-  { code: 3,  code_name: "ERR_SEND_CSQ_FAIL",                  desc: "Signal quality (CSQ) check failed" },
-  { code: 4,  code_name: "ERR_SEND_REG_FAIL",                  desc: "Network registration failed" },
-  { code: 5,  code_name: "ERR_SEND_CCLK_FAIL",                 desc: "Network time (CCLK) retrieval failed" },
-  { code: 6,  code_name: "ERR_SEND_CIMI_FAIL",                 desc: "IMSI (CIMI) retrieval failed" },
-  { code: 7,  code_name: "ERR_SEND_GPRS_FAIL",                 desc: "GPRS/data connection failed" },
-  { code: 8,  code_name: "ERR_SEND_HTTP_FAIL_DATA",            desc: "HTTP data send failed" },
+function loadErrorCodes() {
+  $.getJSON(`/${basePath}/data/error_codes.json`, (data) => {
+    console.log("Got error codes:", data);
+    loadedErrorCodes = parseErrorCodes(data.error_codes);
+  });
+}
 
-  // code 9 intentionally unused (enum gap)
-
-  { code: 10, code_name: "ERR_SEND_UNKWN_FAIL",                desc: "Unknown send failure" },
-  { code: 11, code_name: "ERR_SEND_REPEAT",                    desc: "Send operation repeated" },
-  { code: 12, code_name: "ERR_SEND_FAIL_WRONG_RESPONSE",       desc: "Unexpected or invalid server response" },
-  { code: 13, code_name: "ERR_SEND_PREFS_HTTP_FAIL",           desc: "HTTP request for preferences failed" },
-  { code: 14, code_name: "ERR_SEND_PREFS_HTTP_FAIL_RESPONSE",  desc: "Invalid preferences HTTP response" },
-  { code: 15, code_name: "ERR_SEND_ERRORS_HTTP_FAIL",          desc: "HTTP request for error log failed" },
-  { code: 16, code_name: "ERR_SEND_ERRORS_HTTP_FAIL_RESPONSE", desc: "Invalid error log HTTP response" },
-
-  // ---- DIRECTION WIND VANE (20–26) ----
-  { code: 20, code_name: "ERR_DIR_READ",           desc: "Direction read failed" },
-  { code: 21, code_name: "ERR_DIR_READ_ONCE",      desc: "Direction read required retry" },
-  { code: 22, code_name: "ERR_DIR_NOT_CONNECTED",  desc: "Direction sensor not connected" },
-  { code: 23, code_name: "ERR_DIR_SHORT_BUF_FULL", desc: "Direction short buffer full" },
-  { code: 24, code_name: "ERR_DIR_SDA_NOT_CONN",   desc: "Direction sensor SDA not connected" },
-  { code: 25, code_name: "ERR_DIR_SCL_NOT_CONN",   desc: "Direction sensor SCL not connected" },
-  { code: 26, code_name: "ERR_DIR_MAG_WEAK",       desc: "Magnetic field too weak for direction sensor" },
-
-  // ---- WIND (30–31) ----
-  { code: 30, code_name: "ERR_WIND_BUF_OVERWRITE",  desc: "Wind buffer overwrite" },
-  { code: 31, code_name: "ERR_WIND_SHORT_BUF_FULL", desc: "Wind short buffer full" },
-
-  // ---- TEMP (40) ----
-  { code: 40, code_name: "ERR_TEMP_READ", desc: "Temperature read failed" },
-
-  // ---- POWER / RESET (52–56) ----
-  { code: 52, code_name: "ERR_RESET_BROWNOUT",      desc: "Brown-out / low voltage reset" },
-  { code: 53, code_name: "ERR_RESET_PANIC",         desc: "Software panic / abort reset" },
-  { code: 54, code_name: "ERR_RESET_WDT",           desc: "Watchdog timer reset" },
-  { code: 55, code_name: "ERR_RESET_UNEXPECTED",    desc: "Unexpected or unclassified reset" },
-  { code: 56, code_name: "ERR_CANT_SEND_FORCE_RST", desc: "Failed to send before forced reset" },
-
-  // ---- LOG / INFO (70–71) ----
-  { code: 70, code_name: "LOG_RESET_SW",       desc: "Software reset (info log)" },
-  { code: 71, code_name: "LOG_RESET_POWERON",  desc: "Power-on reset (info log)" },
-];
-
+function parseErrorCodes(error_codes) {
+  return Object.entries(error_codes).map(([code_name, code]) => ({
+    code: Number(code),
+    code_name
+  }));
+}
 
 
 function errorNumToStr(errorNum) {
-  const item = ErrorCodeStrings.find(e => e.code === errorNum);
+  const item = loadedErrorCodes.find(e => e.code === errorNum);
   return item ? `${item.code_name} (${errorNum})` : `${errorNum}`;
 }
 
@@ -712,7 +676,7 @@ function setStatuionParametersPannel(data) {
   displayStatusInfo("gprsRegDur", "Trajanje GPRS registracije", (data["gprsRegDur"] ?? "--") + " s");
   displayStatusInfo("dur", "Trajanje skupaj", (data["dur"] ?? "--") + " s");
   displayStatusInfo("ver", "FW version", data["ver"]);
-  displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
+//  displayStatusInfo("errors", "Errors:", formatErrors(data["errors"]));
 
 
   for (const [key, value] of Object.entries(data)) {

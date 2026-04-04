@@ -15,6 +15,26 @@ function showLoading(isLoading) {
   }
 }
 
+function getAvailablePrefs() {
+  const availablePrefs = [
+    "no_reset",
+    "no_send_prefs",
+    "set_phone_num",
+    "send_error_names",
+    "send_stream_for_s",
+    ""
+  ];
+
+  if(loadedPrefsHistory && Array.isArray(loadedPrefsHistory) && loadedPrefsHistory.length > 0) {
+    Object.entries(loadedPrefsHistory[0].prefs).forEach(([prefName, prefValue]) => {
+      availablePrefs.push(prefName);
+    });
+  }
+
+  // return the list sperated by <br>
+  return availablePrefs.join('<br>');
+}
+
 
 $(function() {
   showLoading(false);
@@ -35,6 +55,8 @@ $(function() {
   $('#btnShowAvailablePrefs').on('click', function () {
     const btn = $(this);
     const root = $("#availablePrefs");
+    root.html(getAvailablePrefs());
+
     if (root.is(":visible")) {
       root.hide();
       btn.text("Show");
@@ -201,8 +223,10 @@ function uploadPreferences() {
   });
 }
 
+let loadedPrefsHistory = null;
 function loadPreferencesHistory() {
   $.getJSON(`https://to-ni.dev/veter/${stationData.name}/data/prefs.json`, function (data) {
+    loadedPrefsHistory = data;
     displayPreferencesHistory(data);
   });
 }
@@ -377,10 +401,20 @@ function prefsToLines(prefsObj) {
 
 function formatVal(v) {
   if (v === undefined) return "(none)";
+
   if (typeof v === "string") {
-    if (/^-?\d+$/.test(v)) return String(parseInt(v, 10));
+    if (/^-?\d+$/.test(v)) {
+      // Keep identifiers like "0123", "001122", phone numbers, IMSI, etc. as strings
+      if (/^0\d+/.test(v) || /^-0\d+/.test(v) || v.length > 7) {
+        return `"${v}"`;
+      }
+
+      return String(parseInt(v, 10));
+    }
+
     return `"${v}"`;
   }
+
   return String(v);
 }
 
